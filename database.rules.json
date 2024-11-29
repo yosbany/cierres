@@ -1,0 +1,19 @@
+{
+  "rules": {
+    "closures": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        "$closureId": {
+          ".validate": "newData.hasChild('userId') && newData.child('userId').val() === auth.uid"
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    }
+  }
+}
