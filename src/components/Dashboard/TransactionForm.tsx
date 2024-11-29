@@ -2,8 +2,10 @@ import React from 'react';
 import { Transaction } from '../../types';
 import { usePredefinedData } from '../../hooks/usePredefinedData';
 import { useTransactionTags } from '../../hooks/useTransactionTags';
-import { PlusCircle, MinusCircle } from 'lucide-react';
+import { PlusCircle, MinusCircle, Calculator } from 'lucide-react';
 import TagInput from './TagInput';
+import CashCalculatorModal from '../CashCalculator/CashCalculatorModal';
+import { DEFAULT_CONCEPTS } from '../../constants';
 
 interface TransactionFormProps {
   transaction: Partial<Transaction>;
@@ -26,14 +28,16 @@ export default function TransactionForm({
 }: TransactionFormProps) {
   const { concepts } = usePredefinedData();
   const { tags, addTags } = useTransactionTags();
+  const [showCalculator, setShowCalculator] = React.useState(false);
 
   const selectedConcept = concepts?.find(c => c.name === transaction.concept);
+  const selectedAccount = accounts.find(acc => acc.id === transaction.accountId);
 
   const isValid = transaction.concept && 
                  transaction.accountId && 
                  transaction.amount !== undefined && 
                  transaction.amount !== null && 
-                 !isNaN(transaction.amount);
+                 transaction.amount !== 0;
 
   const toggleAmountSign = () => {
     if (transaction.amount !== undefined && transaction.amount !== null) {
@@ -45,7 +49,7 @@ export default function TransactionForm({
   };
 
   const handleConceptChange = (conceptName: string) => {
-    const concept = concepts?.find(c => c.name === conceptName);
+    const concept = Object.values(DEFAULT_CONCEPTS).find(c => c.name === conceptName);
     if (concept) {
       onUpdate({
         ...transaction,
@@ -57,30 +61,20 @@ export default function TransactionForm({
 
   const handleAmountChange = (value: string) => {
     const numericValue = value === '' ? undefined : parseFloat(value);
+    const concept = Object.values(DEFAULT_CONCEPTS).find(c => c.name === transaction.concept);
     
-    if (numericValue === undefined) {
+    if (concept && numericValue !== undefined) {
+      const newAmount = concept.type === 'egreso' ? -Math.abs(numericValue) : Math.abs(numericValue);
       onUpdate({
         ...transaction,
-        amount: undefined
+        amount: newAmount
       });
-      return;
+    } else {
+      onUpdate({
+        ...transaction,
+        amount: numericValue
+      });
     }
-
-    if (isNaN(numericValue)) return;
-    
-    const concept = concepts?.find(c => c.name === transaction.concept);
-    let newAmount = numericValue;
-
-    if (concept?.type === 'egreso') {
-      newAmount = -Math.abs(numericValue);
-    } else if (concept?.type === 'ingreso') {
-      newAmount = Math.abs(numericValue);
-    }
-    
-    onUpdate({
-      ...transaction,
-      amount: newAmount
-    });
   };
 
   const handleTagsChange = (newTags: string[]) => {
@@ -153,32 +147,44 @@ export default function TransactionForm({
         </select>
 
         <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
+            <button
+              type="button"
+              onClick={toggleAmountSign}
+              className={`${
+                transaction.amount && transaction.amount < 0 
+                  ? 'text-red-500 hover:text-red-700' 
+                  : 'text-green-500 hover:text-green-700'
+              }`}
+              disabled={isSubmitting || transaction.amount === undefined || transaction.amount === null}
+              title={transaction.amount && transaction.amount < 0 ? "Cambiar a positivo" : "Cambiar a negativo"}
+            >
+              {transaction.amount && transaction.amount < 0 ? (
+                <MinusCircle className="h-5 w-5" />
+              ) : (
+                <PlusCircle className="h-5 w-5" />
+              )}
+            </button>
+          </div>
           <input
             type="number"
             step="0.01"
             placeholder="Monto"
             value={transaction.amount !== undefined ? Math.abs(transaction.amount).toString() : ''}
             onChange={e => handleAmountChange(e.target.value)}
-            className="input pl-12"
+            className="input pl-12 pr-12"
             disabled={isSubmitting}
           />
-          <button
-            type="button"
-            onClick={toggleAmountSign}
-            className={`absolute left-2 top-1/2 -translate-y-1/2 ${
-              transaction.amount && transaction.amount < 0 
-                ? 'text-red-500 hover:text-red-700' 
-                : 'text-green-500 hover:text-green-700'
-            }`}
-            disabled={isSubmitting || transaction.amount === undefined || transaction.amount === null}
-            title={transaction.amount && transaction.amount < 0 ? "Cambiar a positivo" : "Cambiar a negativo"}
-          >
-            {transaction.amount && transaction.amount < 0 ? (
-              <MinusCircle className="h-5 w-5" />
-            ) : (
-              <PlusCircle className="h-5 w-5" />
-            )}
-          </button>
+          {selectedAccount?.type === 'efectivo' && (
+            <button
+              type="button"
+              onClick={() => setShowCalculator(true)}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              disabled={isSubmitting}
+            >
+              <Calculator className="h-5 w-5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -198,6 +204,16 @@ export default function TransactionForm({
           {isSubmitting ? 'Guardando...' : isEditing ? 'Actualizar' : 'Guardar'}
         </button>
       </div>
+
+      <CashCalculatorModal
+        isOpen={showCalculator}
+        onClose={() => setShowCalculator(false)}
+        onConfirm={(amount) => {
+          handleAmountChange(amount.toString());
+          setShowCalculator(false);
+        }}
+        initialAmount={transaction.amount !== undefined ? Math.abs(transaction.amount) : undefined}
+      />
     </div>
   );
 }

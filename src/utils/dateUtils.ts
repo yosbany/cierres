@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { utcToZonedTime } from 'date-fns-tz';
 
@@ -25,6 +25,11 @@ export const getCurrentDate = () => {
   const now = new Date();
   const zonedDate = utcToZonedTime(now, TIMEZONE);
   return format(zonedDate, 'yyyy-MM-dd');
+};
+
+export const getNextDay = (date: string) => {
+  const nextDay = addDays(parseISO(date), 1);
+  return format(nextDay, 'yyyy-MM-dd');
 };
 
 export const getCurrentTimezone = () => TIMEZONE;

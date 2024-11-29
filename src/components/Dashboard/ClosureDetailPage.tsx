@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { ref, update, remove } from 'firebase/database';
 import { db } from '../../lib/firebase';
 import { DailyClosure, Transaction } from '../../types';
-import { ArrowLeft, Download, Trash2, Plus, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeft, Download, Trash2, Plus, ArrowLeftRight, Lock } from 'lucide-react';
 import { usePredefinedData } from '../../hooks/usePredefinedData';
+import { useTransaction } from '../../hooks/useTransaction';
 import toast from 'react-hot-toast';
 import DashboardLayout from './DashboardLayout';
 import DeleteClosureModal from './DeleteClosureModal';
@@ -15,6 +16,10 @@ import TotalsSummary from './TotalsSummary';
 import TransferModal from './Transfers/TransferModal';
 import { useTransfer } from '../../hooks/useTransfer';
 import { generateClosurePDF } from '../../utils/pdfGenerator';
+import { formatDate } from '../../utils/dateUtils';
+import { getPendingTransactions } from '../../utils/transactionUtils';
+import FinalizeClosureModal from './FinalizeClosure/FinalizeClosureModal';
+import PendingTransactionsModal from './FinalizeClosure/PendingTransactionsModal';
 
 interface ClosureDetailPageProps {
   closure: DailyClosure;
@@ -32,6 +37,8 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false);
+  const [showPendingModal, setShowPendingModal] = useState(false);
   const [newTransaction, setNewTransaction] = useState<Partial<Transaction>>({
     concept: '',
     description: '',
@@ -41,56 +48,22 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
 
   const { concepts } = usePredefinedData();
   const { executeTransfer, isSubmitting: isTransferSubmitting } = useTransfer();
+  const { addTransaction, isSubmitting: isAddingTransaction } = useTransaction();
 
   const handleAddTransaction = async () => {
-    if (!newTransaction.concept || !newTransaction.accountId || newTransaction.amount === undefined) {
-      toast.error('Por favor complete todos los campos requeridos');
-      return;
-    }
-
-    setIsSubmitting(true);
     try {
-      const concept = concepts?.find(c => c.name === newTransaction.concept);
-      if (!concept) {
-        throw new Error('Concepto no encontrado');
-      }
-
-      const transaction: Transaction = {
-        id: Date.now().toString(),
-        concept: newTransaction.concept,
-        description: newTransaction.description || '',
-        amount: newTransaction.amount,
-        status: concept.states[0].name,
-        accountId: newTransaction.accountId,
-        timestamp: Date.now(),
-        paymentType: newTransaction.paymentType as 'efectivo' | 'banco'
-      };
-
-      const updatedAccounts = closure.accounts.map(account => {
-        if (account.id === transaction.accountId) {
-          return {
-            ...account,
-            currentBalance: account.currentBalance + transaction.amount
-          };
-        }
-        return account;
-      });
-
-      const updatedTransactions = [...closure.transactions, transaction];
-      const finalBalance = updatedAccounts.reduce((sum, account) => sum + account.currentBalance, 0);
-
-      await update(ref(db, `closures/${closure.id}`), {
-        accounts: updatedAccounts,
-        transactions: updatedTransactions,
-        finalBalance,
-        updatedAt: Date.now()
+      const result = await addTransaction({
+        closureId: closure.id,
+        transaction: newTransaction,
+        accounts: closure.accounts,
+        currentTransactions: closure.transactions || []
       });
 
       setClosure(prev => ({
         ...prev,
-        accounts: updatedAccounts,
-        transactions: updatedTransactions,
-        finalBalance
+        accounts: result.accounts,
+        transactions: [...(prev.transactions || []), result.transaction],
+        finalBalance: result.finalBalance
       }));
 
       setNewTransaction({
@@ -102,7 +75,39 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
       setShowTransactionForm(false);
       toast.success('Transacción agregada exitosamente');
     } catch (error) {
-      toast.error('Error al agregar la transacción');
+      console.error('Error al agregar la transacción:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al agregar la transacción');
+    }
+  };
+
+  const handleFinalizeClosure = () => {
+    const pendingTransactions = getPendingTransactions(closure.transactions || []);
+    
+    if (pendingTransactions.length > 0) {
+      setShowPendingModal(true);
+    } else {
+      setShowFinalizeModal(true);
+    }
+  };
+
+  const handleConfirmFinalize = async () => {
+    setIsSubmitting(true);
+    try {
+      await update(ref(db, `closures/${closure.id}`), {
+        status: 'closed',
+        updatedAt: Date.now()
+      });
+
+      setClosure(prev => ({
+        ...prev,
+        status: 'closed'
+      }));
+
+      setShowFinalizeModal(false);
+      toast.success('Cierre finalizado exitosamente');
+    } catch (error) {
+      console.error('Error al finalizar el cierre:', error);
+      toast.error('Error al finalizar el cierre');
     } finally {
       setIsSubmitting(false);
     }
@@ -118,7 +123,6 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
 
       let transactionsToDelete = [deleteTransactionId];
       
-      // If it's a transfer, delete both transactions
       if (transaction.transferId) {
         transactionsToDelete = closure.transactions
           .filter(t => t.transferId === transaction.transferId)
@@ -162,9 +166,23 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
       toast.success('Transacción eliminada exitosamente');
       setDeleteTransactionId(null);
     } catch (error) {
+      console.error('Error al eliminar la transacción:', error);
       toast.error('Error al eliminar la transacción');
     } finally {
       setIsDeletingTransaction(false);
+    }
+  };
+
+  const handleDeleteClosure = async () => {
+    setIsDeletingClosure(true);
+    try {
+      await remove(ref(db, `closures/${closure.id}`));
+      toast.success('Cierre eliminado exitosamente');
+      onBack();
+    } catch (error) {
+      console.error('Error al eliminar el cierre:', error);
+      toast.error('Error al eliminar el cierre');
+      setIsDeletingClosure(false);
     }
   };
 
@@ -209,18 +227,6 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
     doc.save(`cierre-${closure.date}.pdf`);
   };
 
-  const handleDeleteClosure = async () => {
-    setIsDeletingClosure(true);
-    try {
-      await remove(ref(db, `closures/${closure.id}`));
-      toast.success('Cierre eliminado exitosamente');
-      onBack();
-    } catch (error) {
-      toast.error('Error al eliminar el cierre');
-      setIsDeletingClosure(false);
-    }
-  };
-
   const handleStatusUpdate = async (transaction: Transaction) => {
     const concept = concepts?.find(c => c.name === transaction.concept);
     if (!concept) return;
@@ -254,6 +260,7 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
 
       toast.success('Estado actualizado exitosamente');
     } catch (error) {
+      console.error('Error al actualizar el estado:', error);
       toast.error('Error al actualizar el estado');
     } finally {
       setIsSubmitting(false);
@@ -272,7 +279,7 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
           </button>
           <div>
             <h2 className="text-2xl font-bold text-gray-900">
-              Cierre del {closure.date}
+              {formatDate(closure.date)}
             </h2>
             <p className="text-sm text-gray-500">
               Estado: {closure.status === 'open' ? 'Abierto' : 'Cerrado'}
@@ -285,15 +292,25 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
             className="btn btn-secondary inline-flex items-center"
           >
             <Download className="h-4 w-4 mr-2" />
-            Exportar PDF
+            Imprimir Cierre
           </button>
           <button
             onClick={() => setIsDeleteModalOpen(true)}
-            className="btn bg-red-600 text-white hover:bg-red-700 inline-flex items-center"
+            className="btn bg-red-600 hover:bg-red-700 text-white inline-flex items-center"
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Eliminar Cierre
           </button>
+          {closure.status === 'open' && (
+            <button
+              onClick={handleFinalizeClosure}
+              className="btn bg-green-600 hover:bg-green-700 text-white inline-flex items-center"
+              disabled={isSubmitting}
+            >
+              <Lock className="h-4 w-4 mr-2" />
+              Finalizar Cierre
+            </button>
+          )}
         </div>
       </div>
 
@@ -309,7 +326,7 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-gray-900">Movimientos</h3>
             {closure.status === 'open' && !showTransactionForm && (
-              <div className="flex items-center justify-end gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
                   className="btn btn-secondary inline-flex items-center"
@@ -319,9 +336,9 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
                 </button>
                 <button
                   onClick={() => setShowTransactionForm(true)}
-                  className="btn bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg inline-flex items-center shadow-sm transition-colors"
+                  className="btn btn-primary inline-flex items-center"
                 >
-                  <Plus className="h-5 w-5 mr-2" />
+                  <Plus className="h-4 w-4 mr-2" />
                   Nuevo Movimiento
                 </button>
               </div>
@@ -343,7 +360,7 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
                   paymentType: 'efectivo'
                 });
               }}
-              isSubmitting={isSubmitting}
+              isSubmitting={isAddingTransaction}
               isEditing={!!editingTransaction}
               accounts={closure.accounts}
             />
@@ -390,6 +407,7 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
                       });
                       toast.success('Observaciones guardadas exitosamente');
                     } catch (error) {
+                      console.error('Error al guardar las observaciones:', error);
                       toast.error('Error al guardar las observaciones');
                     } finally {
                       setIsSubmitting(false);
@@ -405,6 +423,19 @@ export default function ClosureDetailPage({ closure: initialClosure, onBack }: C
           </div>
         </div>
       </div>
+
+      <FinalizeClosureModal
+        isOpen={showFinalizeModal}
+        onClose={() => setShowFinalizeModal(false)}
+        onConfirm={handleConfirmFinalize}
+        isSubmitting={isSubmitting}
+      />
+
+      <PendingTransactionsModal
+        isOpen={showPendingModal}
+        onClose={() => setShowPendingModal(false)}
+        transactions={getPendingTransactions(closure.transactions)}
+      />
 
       <TransferModal
         isOpen={isTransferModalOpen}

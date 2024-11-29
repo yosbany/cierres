@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PredefinedAccount } from '../../../types';
-import { Wallet, CreditCard } from 'lucide-react';
+import { Wallet, CreditCard, Calculator } from 'lucide-react';
+import CashCalculatorModal from '../../CashCalculator/CashCalculatorModal';
 
 interface AccountBalanceInputProps {
   account: PredefinedAccount;
@@ -17,6 +18,8 @@ export default function AccountBalanceInput({
   onChange,
   disabled
 }: AccountBalanceInputProps) {
+  const [showCalculator, setShowCalculator] = useState(false);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     if (newValue === '' || parseFloat(newValue) >= 0) {
@@ -58,13 +61,33 @@ export default function AccountBalanceInput({
               placeholder="Ingrese el saldo inicial"
               value={value}
               onChange={handleChange}
-              className="input pl-8 w-full"
+              className="input pl-8 pr-12 w-full"
               required
               disabled={disabled}
             />
+            {account.type === 'efectivo' && (
+              <button
+                type="button"
+                onClick={() => setShowCalculator(true)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                disabled={disabled}
+              >
+                <Calculator className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      <CashCalculatorModal
+        isOpen={showCalculator}
+        onClose={() => setShowCalculator(false)}
+        onConfirm={(amount) => {
+          onChange(amount.toString());
+          setShowCalculator(false);
+        }}
+        initialAmount={value ? parseFloat(value) : undefined}
+      />
     </div>
   );
 }
