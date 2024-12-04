@@ -13,8 +13,8 @@ interface CashFlowPageProps {
 }
 
 export default function CashFlowPage({ closures, onBack }: CashFlowPageProps) {
-  const [timeRange, setTimeRange] = useState<TimeRange>('all');
-  const [grouping, setGrouping] = useState<GroupingType>('month');
+  const [timeRange, setTimeRange] = useState<TimeRange>('currentMonth');
+  const [grouping, setGrouping] = useState<GroupingType>('day');
   const [customRange, setCustomRange] = useState<{ startDate: string; endDate: string } | null>(null);
 
   const { data, loading } = useCashFlowData({

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BarChart2, Calendar, CalendarDays, CalendarRange, ChevronDown } from 'lucide-react';
 
-export type GroupingType = 'week' | 'month' | 'year';
+export type GroupingType = 'day' | 'week' | 'month' | 'year';
 
 interface GroupingSelectorProps {
   value: GroupingType;
@@ -15,16 +15,22 @@ const GROUPING_OPTIONS: Array<{
   icon: React.ReactNode;
 }> = [
   {
+    value: 'day',
+    label: 'Diario',
+    description: 'Agrupar datos por día',
+    icon: <Calendar className="h-5 w-5" />
+  },
+  {
     value: 'week',
     label: 'Semanal',
     description: 'Agrupar datos por semana',
-    icon: <Calendar className="h-5 w-5" />
+    icon: <CalendarDays className="h-5 w-5" />
   },
   {
     value: 'month',
     label: 'Mensual',
     description: 'Agrupar datos por mes',
-    icon: <CalendarDays className="h-5 w-5" />
+    icon: <CalendarRange className="h-5 w-5" />
   },
   {
     value: 'year',

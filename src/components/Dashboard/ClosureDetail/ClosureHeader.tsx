@@ -5,6 +5,7 @@ import { DailyClosure } from '../../../types';
 import { ArrowLeft, Printer, Trash2, Lock } from 'lucide-react';
 import { generateClosurePDF } from '../../../utils/pdfGenerator';
 import DeleteClosureModal from '../DeleteClosureModal';
+import { formatDate } from '../../../utils/dateUtils';
 
 interface ClosureHeaderProps {
   closure: DailyClosure;
@@ -44,7 +45,7 @@ export default function ClosureHeader({
         </button>
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
-            {format(new Date(closure.date), "d 'de' MMMM, yyyy", { locale: es })}
+            {formatDate(closure.date)}
           </h2>
           <p className="text-sm text-gray-500">
             Estado: {closure.status === 'open' ? 'Abierto' : 'Cerrado'}

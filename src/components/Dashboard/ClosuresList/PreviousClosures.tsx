@@ -1,7 +1,7 @@
 import React from 'react';
 import { DailyClosure } from '../../../types';
 import { Clock, Coins, CreditCard } from 'lucide-react';
-import { formatDate } from '../../../utils/dateUtils';
+import { formatShortDate } from '../../../utils/dateUtils';
 import { formatCurrency } from '../../../utils/formatters';
 import { calculateBalances } from './utils';
 
@@ -32,7 +32,7 @@ export default function PreviousClosures({ closures, onClick }: PreviousClosures
               <div className="flex-1">
                 <div className="flex items-center">
                   <span className="text-lg font-medium text-gray-900">
-                    {formatDate(closure.date)}
+                    {formatShortDate(closure.date)}
                   </span>
                   <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                     {closure.status === 'open' ? 'Abierto' : 'Cerrado'}
@@ -58,7 +58,7 @@ export default function PreviousClosures({ closures, onClick }: PreviousClosures
                     </span>
                   </div>
                   <div className="text-sm text-gray-500">
-                    Saldo final: <span className={closure.finalBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                    Balance final: <span className={closure.finalBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
                       {formatCurrency(closure.finalBalance)}
                     </span>
                   </div>

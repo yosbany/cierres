@@ -283,14 +283,6 @@ export const DEFAULT_CONCEPTS = {
       TRANSACTION_STATES.COMPLETED
     ]
   },
-  'concept-2.1': {
-    name: '(+) Sobrante en Caja',
-    type: CONCEPT_TYPES.EXPENSE,
-    states: [
-      TRANSACTION_STATES.PENDING_ACCOUNTING,
-      TRANSACTION_STATES.COMPLETED
-    ]
-  },
   'concept-3': {
     name: '(-) Pago a Proveedores',
     type: CONCEPT_TYPES.EXPENSE,
@@ -321,14 +313,6 @@ export const DEFAULT_CONCEPTS = {
   },
   'concept-6': {
     name: '(-) Egresos Varios',
-    type: CONCEPT_TYPES.EXPENSE,
-    states: [
-      TRANSACTION_STATES.PENDING_ACCOUNTING,
-      TRANSACTION_STATES.COMPLETED
-    ]
-  },
-  'concept-7': {
-    name: '(-) Faltantes en Caja',
     type: CONCEPT_TYPES.EXPENSE,
     states: [
       TRANSACTION_STATES.PENDING_ACCOUNTING,

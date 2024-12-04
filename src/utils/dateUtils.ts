@@ -7,7 +7,13 @@ const TIMEZONE = 'America/Montevideo';
 export const formatDate = (date: string | number | Date) => {
   const parsedDate = typeof date === 'string' ? parseISO(date) : new Date(date);
   const zonedDate = utcToZonedTime(parsedDate, TIMEZONE);
-  return format(zonedDate, "d 'de' MMMM, yyyy", { locale: es });
+  return format(zonedDate, "d 'de' MMMM 'de' yyyy", { locale: es });
+};
+
+export const formatShortDate = (date: string | number | Date) => {
+  const parsedDate = typeof date === 'string' ? parseISO(date) : new Date(date);
+  const zonedDate = utcToZonedTime(parsedDate, TIMEZONE);
+  return format(zonedDate, "d 'de' MMMM", { locale: es });
 };
 
 export const formatDateTime = (timestamp: number) => {

@@ -14,13 +14,15 @@ import {
   eachWeekOfInterval,
   eachMonthOfInterval,
   eachYearOfInterval,
+  eachDayOfInterval,
   isWithinInterval,
   parseISO,
   min,
   max,
   isSameWeek,
   isSameMonth,
-  isSameYear
+  isSameYear,
+  isSameDay
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { TimeRange } from '../components/Dashboard/CashFlow/TimeRangeSelector';
@@ -83,6 +85,8 @@ export function getDateRange(timeRange: TimeRange, customRange?: { startDate: st
 
 export function generatePeriods(startDate: Date, endDate: Date, grouping: GroupingType): Date[] {
   switch (grouping) {
+    case 'day':
+      return eachDayOfInterval({ start: startDate, end: endDate });
     case 'week':
       return eachWeekOfInterval(
         { start: startDate, end: endDate },
@@ -99,6 +103,8 @@ export function generatePeriods(startDate: Date, endDate: Date, grouping: Groupi
 
 export function formatPeriod(date: Date, grouping: GroupingType): string {
   switch (grouping) {
+    case 'day':
+      return format(date, "d 'de' MMMM", { locale: es });
     case 'week': {
       const weekNumber = getWeek(date, { locale: es });
       const yearOfWeek = format(date, 'yyyy');
@@ -122,6 +128,8 @@ export function isClosureInPeriod(
   const closureDate = parseISO(closure.date);
   
   switch (grouping) {
+    case 'day':
+      return isSameDay(closureDate, periodStart);
     case 'week':
       return isSameWeek(closureDate, periodStart, { locale: es });
     case 'month':
@@ -138,24 +146,18 @@ export function calculatePeriodData(closures: DailyClosure[]): {
   expense: number;
   balance: number;
 } {
-  // Sort closures by date and get the last one
-  const sortedClosures = closures.sort((a, b) => 
-    new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  
-  const lastClosure = sortedClosures[0];
   let income = 0;
   let expense = 0;
 
-  if (lastClosure) {
-    lastClosure.transactions?.forEach(transaction => {
+  closures.forEach(closure => {
+    closure.transactions?.forEach(transaction => {
       if (transaction.amount >= 0) {
         income += transaction.amount;
       } else {
         expense += Math.abs(transaction.amount);
       }
     });
-  }
+  });
 
   return {
     income,
