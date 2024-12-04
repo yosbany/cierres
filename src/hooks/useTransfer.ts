@@ -3,6 +3,8 @@ import { ref, update, serverTimestamp } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { Account, Transaction } from '../types';
 import { TRANSACTION_STATES } from '../constants';
+import { validateTransfer } from '../utils/transferValidation';
+import { formatCurrency } from '../utils/formatters';
 
 interface TransferParams {
   fromAccountId: string;
@@ -18,8 +20,12 @@ export function useTransfer() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const getNextTransferNumber = (transactions: Transaction[]): number => {
+    if (!transactions || !Array.isArray(transactions)) {
+      return 1;
+    }
+
     const transferTransactions = transactions.filter(t => 
-      t.concept.startsWith('Transferencia #')
+      t.concept?.startsWith('Transferencia #')
     );
 
     if (transferTransactions.length === 0) return 1;
@@ -39,20 +45,41 @@ export function useTransfer() {
     description,
     closureId,
     accounts,
-    transactions
+    transactions = []
   }: TransferParams) => {
-    setIsSubmitting(true);
-
     try {
+      setIsSubmitting(true);
+
+      const fromAccount = accounts.find(acc => acc.id === fromAccountId);
+      if (!fromAccount) {
+        throw new Error('Cuenta de origen no encontrada');
+      }
+
+      const toAccount = accounts.find(acc => acc.id === toAccountId);
+      if (!toAccount) {
+        throw new Error('Cuenta de destino no encontrada');
+      }
+
+      const validationError = validateTransfer({
+        fromAccount,
+        toAccountId,
+        amount
+      });
+
+      if (validationError) {
+        throw new Error(validationError);
+      }
+
       const nextTransferNumber = getNextTransferNumber(transactions);
       const timestamp = Date.now();
       const transferId = `transfer-${nextTransferNumber}`;
+      const transferDescription = description.trim() || `Transferencia de ${fromAccount.name} a ${toAccount.name}`;
 
       // Create debit transaction (negative amount)
       const debitTransaction: Transaction = {
         id: `${transferId}-debit`,
         concept: `Transferencia #${nextTransferNumber}`,
-        description: `${description} (Débito)`,
+        description: transferDescription,
         amount: -Math.abs(amount),
         status: TRANSACTION_STATES.COMPLETED.name,
         accountId: fromAccountId,
@@ -66,7 +93,7 @@ export function useTransfer() {
       const creditTransaction: Transaction = {
         id: `${transferId}-credit`,
         concept: `Transferencia #${nextTransferNumber}`,
-        description: `${description} (Crédito)`,
+        description: transferDescription,
         amount: Math.abs(amount),
         status: TRANSACTION_STATES.COMPLETED.name,
         accountId: toAccountId,
@@ -79,10 +106,11 @@ export function useTransfer() {
       // Update account balances
       const updatedAccounts = accounts.map(account => {
         if (account.id === fromAccountId) {
-          return {
-            ...account,
-            currentBalance: account.currentBalance - Math.abs(amount)
-          };
+          const newBalance = account.currentBalance - Math.abs(amount);
+          if (newBalance < 0) {
+            throw new Error(`Saldo insuficiente en ${account.name}. Saldo actual: ${formatCurrency(account.currentBalance)}`);
+          }
+          return { ...account, currentBalance: newBalance };
         }
         if (account.id === toAccountId) {
           return {
@@ -116,6 +144,9 @@ export function useTransfer() {
         debitTransaction,
         creditTransaction
       };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al realizar la transferencia';
+      throw new Error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

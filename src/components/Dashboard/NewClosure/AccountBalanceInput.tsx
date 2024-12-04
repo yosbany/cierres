@@ -28,11 +28,16 @@ export default function AccountBalanceInput({
   };
 
   const getAccountIcon = () => {
-    return account.type === 'efectivo' ? (
-      <Wallet className="h-5 w-5 text-green-500" />
-    ) : (
-      <CreditCard className="h-5 w-5 text-purple-500" />
-    );
+    switch (account.type) {
+      case 'efectivo':
+        return <Wallet className="h-5 w-5 text-green-500" />;
+      case 'banco':
+        return <CreditCard className="h-5 w-5 text-purple-500" />;
+      case 'credito':
+        return <CreditCard className="h-5 w-5 text-orange-500" />;
+      default:
+        return <CreditCard className="h-5 w-5 text-gray-500" />;
+    }
   };
 
   return (

@@ -33,9 +33,10 @@ export default function StatusHelpModal({
           </div>
 
           <div className="p-6">
-            <p className="text-gray-700 text-base leading-relaxed">
-              {description}
-            </p>
+            <div 
+              className="prose prose-sm max-w-none text-gray-700"
+              dangerouslySetInnerHTML={{ __html: description }}
+            />
           </div>
         </div>
       </div>

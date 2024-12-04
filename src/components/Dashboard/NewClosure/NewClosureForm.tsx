@@ -34,6 +34,7 @@ export default function NewClosureForm({
 
   const cashAccounts = accounts.filter(account => account.type === 'efectivo');
   const bankAccounts = accounts.filter(account => account.type === 'banco');
+  const creditAccounts = accounts.filter(account => account.type === 'credito');
 
   return (
     <div className="space-y-6">
@@ -85,6 +86,24 @@ export default function NewClosureForm({
                     value={selectedAccounts[cashAccounts.length + index]?.initialBalance || ''}
                     previousBalance={previousBalances[account.id] || 0}
                     onChange={(value) => onAccountChange(cashAccounts.length + index, 'initialBalance', value)}
+                    disabled={isSubmitting}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {creditAccounts.length > 0 && (
+            <div>
+              <h5 className="text-sm font-medium text-gray-500 mb-3">Crédito</h5>
+              <div className="space-y-3">
+                {creditAccounts.map((account, index) => (
+                  <AccountBalanceInput
+                    key={account.id}
+                    account={account}
+                    value={selectedAccounts[cashAccounts.length + bankAccounts.length + index]?.initialBalance || ''}
+                    previousBalance={previousBalances[account.id] || 0}
+                    onChange={(value) => onAccountChange(cashAccounts.length + bankAccounts.length + index, 'initialBalance', value)}
                     disabled={isSubmitting}
                   />
                 ))}

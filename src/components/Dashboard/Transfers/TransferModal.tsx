@@ -34,8 +34,8 @@ export default function TransferModal({
     e.preventDefault();
 
     try {
-      const transferAmount = Math.abs(parseFloat(amount));
       const fromAccount = accounts.find(acc => acc.id === fromAccountId);
+      const transferAmount = parseFloat(amount);
 
       const validationError = validateTransfer({
         fromAccount,
@@ -52,7 +52,7 @@ export default function TransferModal({
         fromAccountId,
         toAccountId,
         amount: transferAmount,
-        description: description.trim() || 'Transferencia entre cuentas'
+        description: description.trim()
       });
 
       resetForm();

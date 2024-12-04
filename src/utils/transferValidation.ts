@@ -1,4 +1,5 @@
 import { Account } from '../types';
+import { formatCurrency } from './formatters';
 
 interface TransferValidationParams {
   fromAccount: Account | undefined;
@@ -24,7 +25,7 @@ export function validateTransfer({
   }
 
   if (fromAccount.currentBalance < amount) {
-    return 'Saldo insuficiente en la cuenta de origen';
+    return `Saldo insuficiente en la cuenta de origen. Saldo actual: ${formatCurrency(fromAccount.currentBalance)}`;
   }
 
   return null;

@@ -1,374 +1,368 @@
 import React, { useState } from 'react';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 import { DailyClosure, Transaction } from '../../types';
-import { X, Plus, Download, CheckCircle, Clock } from 'lucide-react';
-import { ref, update } from 'firebase/database';
+import { ref, update, remove } from 'firebase/database';
 import { db } from '../../lib/firebase';
 import { usePredefinedData } from '../../hooks/usePredefinedData';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 import toast from 'react-hot-toast';
+import DashboardLayout from './DashboardLayout';
+import ClosureHeader from './ClosureDetail/ClosureHeader';
+import AccountsSummary from './AccountsSummary';
+import TransactionSection from './ClosureDetail/TransactionSection';
+import TotalsSummary from './TotalsSummary';
+import ObservationsSection from './ClosureDetail/ObservationsSection';
+import { useTransaction } from '../../hooks/useTransaction';
+import { useTransfer } from '../../hooks/useTransfer';
+import { getPendingTransactions } from '../../utils/transactionUtils';
+import FinalizeClosureModal from './FinalizeClosure/FinalizeClosureModal';
+import PendingTransactionsModal from './FinalizeClosure/PendingTransactionsModal';
 
 interface ClosureDetailProps {
   closure: DailyClosure;
-  onClose: () => void;
-  onUpdate: () => void;
+  onBack: () => void;
 }
 
-const PAYMENT_TYPES = [
-  { id: 'efectivo', name: 'Efectivo' },
-  { id: 'banco', name: 'Banco' }
-] as const;
-
-export default function ClosureDetail({ closure, onClose, onUpdate }: ClosureDetailProps) {
+export default function ClosureDetail({ closure: initialClosure, onBack }: ClosureDetailProps) {
+  const navigate = useNavigate();
   const { concepts } = usePredefinedData();
+  const [closure, setClosure] = useState<DailyClosure>(initialClosure);
+  const [observations, setObservations] = useState(initialClosure.observations || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false);
+  const [showPendingModal, setShowPendingModal] = useState(false);
   const [newTransaction, setNewTransaction] = useState<Partial<Transaction>>({
     concept: '',
     description: '',
-    amount: 0,
-    status: 'pending',
-    accountId: closure.accounts[0]?.id,
+    accountId: initialClosure.accounts[0]?.id,
     paymentType: 'efectivo'
   });
 
+  const { executeTransfer, isSubmitting: isTransferSubmitting } = useTransfer();
+  const { addTransaction, isSubmitting: isAddingTransaction } = useTransaction();
+
   const handleAddTransaction = async () => {
-    if (!newTransaction.concept || !newTransaction.accountId) {
-      toast.error('Por favor complete todos los campos requeridos');
-      return;
-    }
-
-    const transaction: Transaction = {
-      id: Date.now().toString(),
-      concept: newTransaction.concept,
-      description: newTransaction.description || '',
-      amount: newTransaction.amount || 0,
-      status: newTransaction.status as 'pending' | 'completed',
-      accountId: newTransaction.accountId,
-      timestamp: Date.now(),
-      paymentType: newTransaction.paymentType as 'efectivo' | 'banco'
-    };
-
-    const updatedAccounts = closure.accounts.map(account => {
-      if (account.id === transaction.accountId) {
-        return {
-          ...account,
-          currentBalance: account.currentBalance + (transaction.amount || 0)
-        };
-      }
-      return account;
-    });
-
-    const updatedTransactions = [...(closure.transactions || []), transaction];
-    const finalBalance = updatedAccounts.reduce((sum, account) => sum + account.currentBalance, 0);
-
     try {
+      const result = await addTransaction({
+        closureId: closure.id,
+        transaction: newTransaction,
+        accounts: closure.accounts,
+        currentTransactions: closure.transactions || []
+      });
+
+      setClosure(prev => ({
+        ...prev,
+        accounts: result.accounts,
+        transactions: [...(prev.transactions || []), result.transaction],
+        finalBalance: result.finalBalance
+      }));
+
+      setNewTransaction({
+        concept: '',
+        description: '',
+        accountId: closure.accounts[0]?.id,
+        paymentType: 'efectivo'
+      });
+      setShowTransactionModal(false);
+      toast.success('Transacción agregada exitosamente');
+    } catch (error) {
+      console.error('Error al agregar la transacción:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al agregar la transacción');
+    }
+  };
+
+  const handleUpdateTransactionDescription = async (transaction: Transaction, description: string) => {
+    setIsSubmitting(true);
+    try {
+      const updatedTransactions = closure.transactions.map(t =>
+        t.id === transaction.id ? { ...t, description } : t
+      );
+
+      await update(ref(db, `closures/${closure.id}`), {
+        transactions: updatedTransactions,
+        updatedAt: Date.now()
+      });
+
+      setClosure(prev => ({
+        ...prev,
+        transactions: updatedTransactions
+      }));
+
+      toast.success('Descripción actualizada exitosamente');
+    } catch (error) {
+      console.error('Error al actualizar la descripción:', error);
+      toast.error('Error al actualizar la descripción');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleStatusUpdate = async (transaction: Transaction) => {
+    if (!concepts) return;
+    
+    const concept = concepts.find(c => c.name === transaction.concept);
+    if (!concept) return;
+
+    const currentState = concept.states.find(s => s.name === transaction.status);
+    if (!currentState) return;
+
+    const nextState = concept.states[concept.states.indexOf(currentState) + 1];
+    if (!nextState) return;
+
+    setIsSubmitting(true);
+    try {
+      const updatedTransaction = {
+        ...transaction,
+        status: nextState.name
+      };
+
+      const updatedTransactions = closure.transactions.map(t =>
+        t.id === transaction.id ? updatedTransaction : t
+      );
+
+      await update(ref(db, `closures/${closure.id}`), {
+        transactions: updatedTransactions,
+        updatedAt: Date.now()
+      });
+
+      setClosure(prev => ({
+        ...prev,
+        transactions: updatedTransactions
+      }));
+
+      toast.success('Estado actualizado exitosamente');
+    } catch (error) {
+      console.error('Error al actualizar el estado:', error);
+      toast.error('Error al actualizar el estado');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleTransfer = async (transfer: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    description: string;
+  }) => {
+    try {
+      const result = await executeTransfer({
+        ...transfer,
+        closureId: closure.id,
+        accounts: closure.accounts,
+        transactions: closure.transactions || []
+      });
+
+      if (result) {
+        setClosure(prev => ({
+          ...prev,
+          accounts: result.updatedAccounts,
+          transactions: result.updatedTransactions,
+          finalBalance: result.finalBalance
+        }));
+
+        toast.success('Transferencia realizada exitosamente');
+        setShowTransferModal(false);
+      }
+    } catch (error) {
+      console.error('Error en la transferencia:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al realizar la transferencia');
+    }
+  };
+
+  const handleDeleteTransaction = async (transactionId: string) => {
+    setIsSubmitting(true);
+    try {
+      const transaction = closure.transactions.find(t => t.id === transactionId);
+      if (!transaction) {
+        throw new Error('Transacción no encontrada');
+      }
+
+      // Find related transfer transaction if exists
+      let transactionsToDelete = [transactionId];
+      if (transaction.transferId) {
+        const relatedTransaction = closure.transactions.find(t => 
+          t.transferId === transaction.transferId && t.id !== transactionId
+        );
+        if (relatedTransaction) {
+          transactionsToDelete.push(relatedTransaction.id);
+        }
+      }
+
+      // Update account balances
+      const updatedAccounts = closure.accounts.map(account => {
+        const accountTransactions = closure.transactions.filter(t => 
+          transactionsToDelete.includes(t.id) && t.accountId === account.id
+        );
+        
+        if (accountTransactions.length > 0) {
+          const totalAmount = accountTransactions.reduce((sum, t) => sum + t.amount, 0);
+          return {
+            ...account,
+            currentBalance: account.currentBalance - totalAmount
+          };
+        }
+        return account;
+      });
+
+      const updatedTransactions = closure.transactions.filter(t => 
+        !transactionsToDelete.includes(t.id)
+      );
+      
+      const finalBalance = updatedAccounts.reduce((sum, account) => 
+        sum + account.currentBalance, 0
+      );
+
       await update(ref(db, `closures/${closure.id}`), {
         accounts: updatedAccounts,
         transactions: updatedTransactions,
         finalBalance,
         updatedAt: Date.now()
       });
-      
-      setNewTransaction({
-        concept: '',
-        description: '',
-        amount: 0,
-        status: 'pending',
-        accountId: closure.accounts[0]?.id,
-        paymentType: 'efectivo'
-      });
-      
-      onUpdate();
-      toast.success('Transacción agregada exitosamente');
+
+      setClosure(prev => ({
+        ...prev,
+        accounts: updatedAccounts,
+        transactions: updatedTransactions,
+        finalBalance
+      }));
+
+      toast.success('Transacción eliminada exitosamente');
     } catch (error) {
-      toast.error('Error al agregar la transacción');
+      console.error('Error al eliminar la transacción:', error);
+      toast.error('Error al eliminar la transacción');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleGeneratePDF = () => {
-    const doc = new jsPDF();
+  const handleFinalizeClosure = () => {
+    const pendingTransactions = getPendingTransactions(closure.transactions || []);
     
-    // Title
-    doc.setFontSize(20);
-    doc.text('Cierre Diario', 105, 20, { align: 'center' });
-    doc.setFontSize(12);
-    doc.text(format(new Date(closure.date), "d 'de' MMMM, yyyy", { locale: es }), 105, 30, { align: 'center' });
+    if (pendingTransactions.length > 0) {
+      setShowPendingModal(true);
+    } else {
+      setShowFinalizeModal(true);
+    }
+  };
 
-    // Accounts Summary
-    doc.setFontSize(16);
-    doc.text('Resumen de Cuentas', 14, 45);
-    
-    const accountsData = closure.accounts.map(account => [
-      account.name,
-      `$${account.initialBalance.toLocaleString('es-AR')}`,
-      `$${account.currentBalance.toLocaleString('es-AR')}`
-    ]);
+  const handleConfirmFinalize = async () => {
+    setIsSubmitting(true);
+    try {
+      await update(ref(db, `closures/${closure.id}`), {
+        status: 'closed',
+        updatedAt: Date.now()
+      });
 
-    (doc as any).autoTable({
-      startY: 50,
-      head: [['Cuenta', 'Saldo Inicial', 'Saldo Actual']],
-      body: accountsData,
-      theme: 'grid'
-    });
+      setClosure(prev => ({
+        ...prev,
+        status: 'closed'
+      }));
 
-    // Transactions
-    doc.setFontSize(16);
-    doc.text('Movimientos', 14, (doc as any).lastAutoTable.finalY + 15);
+      setShowFinalizeModal(false);
+      toast.success('Cierre finalizado exitosamente');
+    } catch (error) {
+      console.error('Error al finalizar el cierre:', error);
+      toast.error('Error al finalizar el cierre');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    const transactionsData = (closure.transactions || []).map(transaction => [
-      format(new Date(transaction.timestamp), 'dd/MM/yyyy HH:mm'),
-      transaction.concept,
-      transaction.description,
-      PAYMENT_TYPES.find(t => t.id === transaction.paymentType)?.name,
-      `$${transaction.amount.toLocaleString('es-AR')}`,
-      transaction.status === 'completed' ? 'Finalizado' : 'Pendiente'
-    ]);
+  const handleDeleteClosure = async () => {
+    setIsSubmitting(true);
+    try {
+      await remove(ref(db, `closures/${closure.id}`));
+      toast.success('Cierre eliminado exitosamente');
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error al eliminar el cierre:', error);
+      toast.error('Error al eliminar el cierre');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    (doc as any).autoTable({
-      startY: (doc as any).lastAutoTable.finalY + 20,
-      head: [['Fecha', 'Concepto', 'Descripción', 'Tipo', 'Monto', 'Estado']],
-      body: transactionsData,
-      theme: 'grid'
-    });
-
-    // Final Balance
-    doc.setFontSize(16);
-    doc.text(
-      `Saldo Final: $${closure.finalBalance.toLocaleString('es-AR')}`,
-      14,
-      (doc as any).lastAutoTable.finalY + 15
-    );
-
-    doc.save(`cierre-${closure.date}.pdf`);
+  const handleSaveObservations = async () => {
+    setIsSubmitting(true);
+    try {
+      await update(ref(db, `closures/${closure.id}`), {
+        observations,
+        updatedAt: Date.now()
+      });
+      toast.success('Observaciones guardadas exitosamente');
+    } catch (error) {
+      console.error('Error al guardar las observaciones:', error);
+      toast.error('Error al guardar las observaciones');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-end justify-center p-4 sm:items-center">
-        <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose}></div>
-        
-        <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b">
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900">
-                Detalle del Cierre - {format(new Date(closure.date), "d 'de' MMMM, yyyy", { locale: es })}
-              </h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Estado: {closure.status === 'open' ? 'Abierto' : 'Cerrado'}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleGeneratePDF}
-                className="btn btn-secondary inline-flex items-center"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Exportar PDF
-              </button>
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-          </div>
+    <DashboardLayout>
+      <ClosureHeader
+        closure={closure}
+        onBack={onBack}
+        onFinalize={handleFinalizeClosure}
+        onDelete={handleDeleteClosure}
+        isSubmitting={isSubmitting}
+      />
 
-          <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-            {/* Accounts Summary */}
-            <div>
-              <h4 className="text-lg font-medium text-gray-900 mb-4">Resumen de Cuentas</h4>
-              <div className="bg-gray-50 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Cuenta
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Saldo Inicial
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Saldo Actual
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {closure.accounts.map((account) => (
-                      <tr key={account.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {account.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                          ${account.initialBalance.toLocaleString('es-AR')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                          ${account.currentBalance.toLocaleString('es-AR')}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="bg-gray-50 font-medium">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        Total
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                        ${closure.accounts.reduce((sum, account) => sum + account.initialBalance, 0).toLocaleString('es-AR')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                        ${closure.finalBalance.toLocaleString('es-AR')}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+      <div className="space-y-6">
+        <AccountsSummary 
+          accounts={closure.accounts} 
+          finalBalance={closure.finalBalance} 
+        />
 
-            {/* Transactions */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-lg font-medium text-gray-900">Movimientos</h4>
-                {closure.status === 'open' && (
-                  <button
-                    onClick={handleAddTransaction}
-                    className="btn btn-primary inline-flex items-center"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Agregar Movimiento
-                  </button>
-                )}
-              </div>
+        <TransactionSection
+          closure={closure}
+          accounts={closure.accounts}
+          concepts={concepts || []}
+          isSubmitting={isSubmitting}
+          onStatusUpdate={handleStatusUpdate}
+          onDescriptionUpdate={handleUpdateTransactionDescription}
+          onAddTransaction={handleAddTransaction}
+          onTransfer={handleTransfer}
+          onDeleteTransaction={handleDeleteTransaction}
+          showTransactionModal={showTransactionModal}
+          setShowTransactionModal={setShowTransactionModal}
+          showTransferModal={showTransferModal}
+          setShowTransferModal={setShowTransferModal}
+          newTransaction={newTransaction}
+          setNewTransaction={setNewTransaction}
+          isAddingTransaction={isAddingTransaction}
+          isTransferSubmitting={isTransferSubmitting}
+        />
 
-              {closure.status === 'open' && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <select
-                      value={newTransaction.concept}
-                      onChange={e => setNewTransaction(prev => ({ ...prev, concept: e.target.value }))}
-                      className="input"
-                    >
-                      <option value="">Seleccionar concepto</option>
-                      {concepts.map(concept => (
-                        <option key={concept.id} value={concept.name}>
-                          {concept.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Descripción"
-                      value={newTransaction.description}
-                      onChange={e => setNewTransaction(prev => ({ ...prev, description: e.target.value }))}
-                      className="input"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 gap-4">
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="Monto"
-                      value={newTransaction.amount}
-                      onChange={e => setNewTransaction(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
-                      className="input"
-                    />
-                    <select
-                      value={newTransaction.accountId}
-                      onChange={e => setNewTransaction(prev => ({ ...prev, accountId: e.target.value }))}
-                      className="input"
-                    >
-                      {closure.accounts.map(account => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={newTransaction.paymentType}
-                      onChange={e => setNewTransaction(prev => ({ ...prev, paymentType: e.target.value as 'efectivo' | 'banco' }))}
-                      className="input"
-                    >
-                      {PAYMENT_TYPES.map(type => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={newTransaction.status}
-                      onChange={e => setNewTransaction(prev => ({ ...prev, status: e.target.value as 'pending' | 'completed' }))}
-                      className="input"
-                    >
-                      <option value="pending">Pendiente</option>
-                      <option value="completed">Finalizado</option>
-                    </select>
-                  </div>
-                </div>
-              )}
+        <TotalsSummary
+          accounts={closure.accounts}
+          transactions={closure.transactions}
+          finalBalance={closure.finalBalance}
+        />
 
-              <div className="bg-white shadow rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Fecha
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Concepto
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Descripción
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Tipo
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Monto
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Estado
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {(closure.transactions || []).map((transaction) => (
-                      <tr key={transaction.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {format(new Date(transaction.timestamp), 'dd/MM/yyyy HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {transaction.concept}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {transaction.description}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {PAYMENT_TYPES.find(t => t.id === transaction.paymentType)?.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
-                          <span className={transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            ${Math.abs(transaction.amount).toLocaleString('es-AR')}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                          {transaction.status === 'completed' ? (
-                            <span className="inline-flex items-center text-green-600">
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Finalizado
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-yellow-600">
-                              <Clock className="h-4 w-4 mr-1" />
-                              Pendiente
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ObservationsSection
+          observations={observations}
+          setObservations={setObservations}
+          onSave={handleSaveObservations}
+          isSubmitting={isSubmitting}
+          isClosureOpen={closure.status === 'open'}
+        />
       </div>
-    </div>
+
+      <FinalizeClosureModal
+        isOpen={showFinalizeModal}
+        onClose={() => setShowFinalizeModal(false)}
+        onConfirm={handleConfirmFinalize}
+        isSubmitting={isSubmitting}
+      />
+
+      <PendingTransactionsModal
+        isOpen={showPendingModal}
+        onClose={() => setShowPendingModal(false)}
+        transactions={getPendingTransactions(closure.transactions || [])}
+      />
+    </DashboardLayout>
   );
 }

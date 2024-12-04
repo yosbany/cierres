@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { Transaction, Account } from '../types';
 import { validateTransaction, getInitialTransactionState, formatTransactionAmount } from '../utils/transactionValidation';
 import { DEFAULT_CONCEPTS } from '../constants';
+import toast from 'react-hot-toast';
 
 interface AddTransactionParams {
   closureId: string;
@@ -21,23 +22,29 @@ export function useTransaction() {
     accounts,
     currentTransactions
   }: AddTransactionParams) => {
-    if (!transaction.concept || !transaction.accountId) {
-      throw new Error('Datos de transacción incompletos');
-    }
-
-    const validationError = validateTransaction({
-      concept: transaction.concept,
-      accountId: transaction.accountId,
-      amount: transaction.amount
-    });
-
-    if (validationError) {
-      throw new Error(validationError);
-    }
-
-    setIsSubmitting(true);
-
     try {
+      if (!transaction.concept || !transaction.accountId) {
+        throw new Error('Datos de transacción incompletos');
+      }
+
+      const selectedAccount = accounts.find(acc => acc.id === transaction.accountId);
+      if (!selectedAccount) {
+        throw new Error('Cuenta no encontrada');
+      }
+
+      const validationError = validateTransaction({
+        concept: transaction.concept,
+        accountId: transaction.accountId,
+        amount: transaction.amount,
+        currentBalance: selectedAccount.currentBalance
+      });
+
+      if (validationError) {
+        throw new Error(validationError);
+      }
+
+      setIsSubmitting(true);
+
       const conceptDef = Object.values(DEFAULT_CONCEPTS).find(c => c.name === transaction.concept);
       if (!conceptDef) {
         throw new Error('Concepto no encontrado');
@@ -61,9 +68,13 @@ export function useTransaction() {
 
       const updatedAccounts = accounts.map(account => {
         if (account.id === transaction.accountId) {
+          const newBalance = account.currentBalance + formattedAmount;
+          if (newBalance < 0) {
+            throw new Error('La operación resultaría en un saldo negativo');
+          }
           return {
             ...account,
-            currentBalance: account.currentBalance + formattedAmount
+            currentBalance: newBalance
           };
         }
         return account;
@@ -84,6 +95,10 @@ export function useTransaction() {
         accounts: updatedAccounts,
         finalBalance
       };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al agregar la transacción';
+      toast.error(errorMessage);
+      throw error;
     } finally {
       setIsSubmitting(false);
     }

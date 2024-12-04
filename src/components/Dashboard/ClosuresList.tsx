@@ -2,6 +2,7 @@ import React from 'react';
 import { DailyClosure } from '../../types';
 import { ChevronRight, Coins, CreditCard, Calendar } from 'lucide-react';
 import { formatDate, getCurrentDate } from '../../utils/dateUtils';
+import { formatCurrency } from '../../utils/formatters';
 
 interface ClosuresListProps {
   closures: DailyClosure[];
@@ -18,10 +19,12 @@ export default function ClosuresList({ closures, onClosureClick }: ClosuresListP
           acc.cashBalance += account.currentBalance;
         } else if (account.type === 'banco') {
           acc.bankBalance += account.currentBalance;
+        } else if (account.type === 'credito') {
+          acc.creditBalance += account.currentBalance;
         }
         return acc;
       },
-      { cashBalance: 0, bankBalance: 0 }
+      { cashBalance: 0, bankBalance: 0, creditBalance: 0 }
     );
   };
 
@@ -29,7 +32,7 @@ export default function ClosuresList({ closures, onClosureClick }: ClosuresListP
     <div className="bg-white shadow rounded-lg overflow-hidden">
       <div className="divide-y divide-gray-200">
         {closures.map((closure, index) => {
-          const { cashBalance, bankBalance } = calculateBalances(closure);
+          const { cashBalance, bankBalance, creditBalance } = calculateBalances(closure);
           const isToday = closure.date === today;
           const isFirstClosure = index === 0;
           
@@ -65,18 +68,24 @@ export default function ClosuresList({ closures, onClosureClick }: ClosuresListP
                   <div className="flex items-center text-sm text-gray-500">
                     <Coins className="h-4 w-4 text-green-500 mr-1" />
                     <span className={cashBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ${cashBalance.toLocaleString('es-AR')}
+                      {formatCurrency(cashBalance)}
                     </span>
                   </div>
                   <div className="flex items-center text-sm text-gray-500">
                     <CreditCard className="h-4 w-4 text-purple-500 mr-1" />
                     <span className={bankBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ${bankBalance.toLocaleString('es-AR')}
+                      {formatCurrency(bankBalance)}
+                    </span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-500">
+                    <CreditCard className="h-4 w-4 text-orange-500 mr-1" />
+                    <span className={creditBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      {formatCurrency(creditBalance)}
                     </span>
                   </div>
                   <div className="text-sm text-gray-500">
                     Saldo final: <span className={closure.finalBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ${closure.finalBalance.toLocaleString('es-AR')}
+                      {formatCurrency(closure.finalBalance)}
                     </span>
                   </div>
                 </div>

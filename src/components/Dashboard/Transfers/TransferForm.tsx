@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Account } from '../../../types';
 import { ArrowRight } from 'lucide-react';
-import { formatCurrency } from '../../../utils/formatters';
+import { validateTransfer } from '../../../utils/transferValidation';
+import AccountSelect from './AccountSelect';
+import AmountInput from './AmountInput';
+import TransferError from './TransferError';
 
 interface TransferFormProps {
   accounts: Account[];
@@ -32,90 +35,53 @@ export default function TransferForm({
   onSubmit,
   onCancel
 }: TransferFormProps) {
+  const [validationError, setValidationError] = useState<string | null>(null);
   const fromAccount = accounts.find(acc => acc.id === fromAccountId);
   const maxAmount = fromAccount?.currentBalance || 0;
 
+  useEffect(() => {
+    if (fromAccountId && toAccountId && amount) {
+      const error = validateTransfer({
+        fromAccount,
+        toAccountId,
+        amount: parseFloat(amount)
+      });
+      setValidationError(error);
+    } else {
+      setValidationError(null);
+    }
+  }, [fromAccountId, toAccountId, amount, fromAccount]);
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Cuenta Origen
-        </label>
-        <select
-          value={fromAccountId}
-          onChange={(e) => onFromAccountChange(e.target.value)}
-          className="input"
-          required
-          disabled={isSubmitting}
-        >
-          <option value="">Seleccionar cuenta</option>
-          {accounts.map(account => (
-            <option 
-              key={account.id} 
-              value={account.id}
-              disabled={account.id === toAccountId}
-            >
-              {account.name} ({formatCurrency(account.currentBalance)})
-            </option>
-          ))}
-        </select>
-      </div>
+      <AccountSelect
+        label="Cuenta Origen"
+        accounts={accounts}
+        value={fromAccountId}
+        onChange={onFromAccountChange}
+        disabledId={toAccountId}
+        isSubmitting={isSubmitting}
+      />
 
       <div className="flex justify-center">
         <ArrowRight className="h-6 w-6 text-gray-400" />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Cuenta Destino
-        </label>
-        <select
-          value={toAccountId}
-          onChange={(e) => onToAccountChange(e.target.value)}
-          className="input"
-          required
-          disabled={isSubmitting}
-        >
-          <option value="">Seleccionar cuenta</option>
-          {accounts.map(account => (
-            <option 
-              key={account.id} 
-              value={account.id}
-              disabled={account.id === fromAccountId}
-            >
-              {account.name} ({formatCurrency(account.currentBalance)})
-            </option>
-          ))}
-        </select>
-      </div>
+      <AccountSelect
+        label="Cuenta Destino"
+        accounts={accounts}
+        value={toAccountId}
+        onChange={onToAccountChange}
+        disabledId={fromAccountId}
+        isSubmitting={isSubmitting}
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Monto
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <span className="text-gray-500">$</span>
-          </div>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            max={maxAmount}
-            value={amount}
-            onChange={(e) => onAmountChange(e.target.value)}
-            className="input pl-8"
-            placeholder="Ingrese el monto a transferir"
-            required
-            disabled={isSubmitting}
-          />
-        </div>
-        {fromAccount && (
-          <p className="mt-1 text-sm text-gray-500">
-            Saldo disponible: {formatCurrency(maxAmount)}
-          </p>
-        )}
-      </div>
+      <AmountInput
+        value={amount}
+        onChange={onAmountChange}
+        maxAmount={maxAmount}
+        isSubmitting={isSubmitting}
+      />
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -130,6 +96,8 @@ export default function TransferForm({
           disabled={isSubmitting}
         />
       </div>
+
+      <TransferError error={validationError || ''} />
 
       <div className="flex justify-end gap-3 pt-4">
         <button
@@ -149,7 +117,8 @@ export default function TransferForm({
             !toAccountId || 
             !amount || 
             parseFloat(amount) <= 0 || 
-            parseFloat(amount) > maxAmount
+            (fromAccount && parseFloat(amount) > fromAccount.currentBalance) ||
+            !!validationError
           }
         >
           {isSubmitting ? (

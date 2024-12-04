@@ -1,16 +1,19 @@
 import { Transaction } from '../types';
 import { DEFAULT_CONCEPTS } from '../constants';
+import { formatCurrency } from './formatters';
 
 interface ValidateTransactionParams {
   concept: string;
   accountId: string;
   amount?: number;
+  currentBalance?: number;
 }
 
 export function validateTransaction({ 
   concept, 
   accountId, 
-  amount 
+  amount,
+  currentBalance = 0
 }: ValidateTransactionParams): string | null {
   if (!concept) {
     return 'El concepto es requerido';
@@ -40,6 +43,14 @@ export function validateTransaction({
 
   if (conceptDef.type === 'egreso' && amount > 0) {
     return 'El monto debe ser negativo para egresos';
+  }
+
+  // Check if transaction would result in negative balance
+  if (conceptDef.type === 'egreso') {
+    const finalBalance = currentBalance + amount;
+    if (finalBalance < 0) {
+      return `Saldo insuficiente. El saldo actual es ${formatCurrency(currentBalance)} y la operación requiere ${formatCurrency(Math.abs(amount))}`;
+    }
   }
 
   return null;

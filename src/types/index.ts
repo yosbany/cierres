@@ -1,7 +1,7 @@
 export interface Account {
   id: string;
   name: string;
-  type: 'efectivo' | 'banco';
+  type: 'efectivo' | 'banco' | 'credito';
   initialBalance: number;
   currentBalance: number;
 }
@@ -11,6 +11,7 @@ export interface ConceptState {
   name: string;
   order: number;
   isFinal: boolean;
+  description: string;
 }
 
 export interface Transaction {
@@ -23,7 +24,7 @@ export interface Transaction {
   accountId: string;
   transferId?: string;
   relatedAccountId?: string;
-  paymentType: 'efectivo' | 'banco' | 'transferencia';
+  paymentType: 'efectivo' | 'banco' | 'credito' | 'transferencia';
 }
 
 export interface DailyClosure {
@@ -42,7 +43,7 @@ export interface DailyClosure {
 export interface PredefinedAccount {
   id: string;
   name: string;
-  type: 'efectivo' | 'banco';
+  type: 'efectivo' | 'banco' | 'credito';
 }
 
 export interface PredefinedConcept {

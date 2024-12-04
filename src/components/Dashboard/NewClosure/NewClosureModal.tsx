@@ -26,6 +26,7 @@ export const NewClosureModal = ({ isOpen, onClose }: NewClosureModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastClosureDate, setLastClosureDate] = useState<string | null>(null);
   const [previousBalances, setPreviousBalances] = useState<Record<string, number>>({});
+  const [hasActiveClosures, setHasActiveClosures] = useState(false);
 
   useEffect(() => {
     if (error) {
@@ -45,6 +46,39 @@ export const NewClosureModal = ({ isOpen, onClose }: NewClosureModalProps) => {
 
     loadLastClosureData();
   }, [currentUser, accounts]);
+
+  const checkActiveClosures = async () => {
+    if (!currentUser) return;
+
+    try {
+      const closuresRef = ref(db, 'closures');
+      const activeClosuresQuery = query(
+        closuresRef,
+        orderByChild('userId'),
+        equalTo(currentUser.uid)
+      );
+
+      const snapshot = await get(activeClosuresQuery);
+      if (snapshot.exists()) {
+        const closures = Object.values(snapshot.val());
+        const hasActive = closures.some((closure: any) => closure.status === 'open');
+        setHasActiveClosures(hasActive);
+
+        if (hasActive) {
+          toast.error('Ya existe un cierre activo. Debe finalizar el cierre actual antes de crear uno nuevo.');
+          onClose();
+        }
+      }
+    } catch (error) {
+      console.error('Error checking active closures:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      checkActiveClosures();
+    }
+  }, [isOpen]);
 
   const loadLastClosureData = async () => {
     if (!currentUser) return;
@@ -125,6 +159,11 @@ export const NewClosureModal = ({ isOpen, onClose }: NewClosureModalProps) => {
     
     if (!currentUser) {
       toast.error('Usuario no autenticado');
+      return;
+    }
+
+    if (hasActiveClosures) {
+      toast.error('Ya existe un cierre activo. Debe finalizar el cierre actual antes de crear uno nuevo.');
       return;
     }
 
@@ -253,7 +292,7 @@ export const NewClosureModal = ({ isOpen, onClose }: NewClosureModalProps) => {
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={isSubmitting}
+                disabled={isSubmitting || hasActiveClosures}
               >
                 {isSubmitting ? (
                   <div className="flex items-center">
