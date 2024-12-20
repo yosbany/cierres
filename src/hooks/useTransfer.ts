@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { Account, Transaction } from '../types';
 import { TRANSACTION_STATES } from '../constants';
 import { validateTransfer } from '../utils/transferValidation';
-import { formatCurrency } from '../utils/formatters';
+import { useDescriptionTags } from './useDescriptionTags';
 
 interface TransferParams {
   fromAccountId: string;
@@ -18,25 +18,7 @@ interface TransferParams {
 
 export function useTransfer() {
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const getNextTransferNumber = (transactions: Transaction[]): number => {
-    if (!transactions || !Array.isArray(transactions)) {
-      return 1;
-    }
-
-    const transferTransactions = transactions.filter(t => 
-      t.concept?.startsWith('Transferencia #')
-    );
-
-    if (transferTransactions.length === 0) return 1;
-
-    const numbers = transferTransactions.map(t => {
-      const match = t.concept.match(/Transferencia #(\d+)/);
-      return match ? parseInt(match[1], 10) : 0;
-    });
-
-    return Math.max(...numbers) + 1;
-  };
+  const { addDescriptionFromTransaction } = useDescriptionTags();
 
   const executeTransfer = async ({
     fromAccountId,
@@ -51,15 +33,8 @@ export function useTransfer() {
       setIsSubmitting(true);
 
       const fromAccount = accounts.find(acc => acc.id === fromAccountId);
-      if (!fromAccount) {
-        throw new Error('Cuenta de origen no encontrada');
-      }
-
-      const toAccount = accounts.find(acc => acc.id === toAccountId);
-      if (!toAccount) {
-        throw new Error('Cuenta de destino no encontrada');
-      }
-
+      
+      // Validate transfer
       const validationError = validateTransfer({
         fromAccount,
         toAccountId,
@@ -70,15 +45,32 @@ export function useTransfer() {
         throw new Error(validationError);
       }
 
-      const nextTransferNumber = getNextTransferNumber(transactions);
-      const timestamp = Date.now();
-      const transferId = `transfer-${nextTransferNumber}`;
-      const transferDescription = description.trim() || `Transferencia de ${fromAccount.name} a ${toAccount.name}`;
+      // Update account balances
+      const updatedAccounts = accounts.map(account => {
+        if (account.id === fromAccountId) {
+          return {
+            ...account,
+            currentBalance: account.currentBalance - amount
+          };
+        }
+        if (account.id === toAccountId) {
+          return {
+            ...account,
+            currentBalance: account.currentBalance + amount
+          };
+        }
+        return account;
+      });
 
-      // Create debit transaction (negative amount)
+      // Create transfer transactions
+      const transferId = `transfer-${Date.now()}`;
+      const timestamp = Date.now();
+      const transferDescription = description.trim() || 'Transferencia entre cuentas';
+
+      // Create debit transaction (from account)
       const debitTransaction: Transaction = {
         id: `${transferId}-debit`,
-        concept: `Transferencia #${nextTransferNumber}`,
+        concept: 'Transferencia',
         description: transferDescription,
         amount: -Math.abs(amount),
         status: TRANSACTION_STATES.COMPLETED.name,
@@ -89,10 +81,10 @@ export function useTransfer() {
         paymentType: 'transferencia'
       };
 
-      // Create credit transaction (positive amount)
+      // Create credit transaction (to account)
       const creditTransaction: Transaction = {
         id: `${transferId}-credit`,
-        concept: `Transferencia #${nextTransferNumber}`,
+        concept: 'Transferencia',
         description: transferDescription,
         amount: Math.abs(amount),
         status: TRANSACTION_STATES.COMPLETED.name,
@@ -103,31 +95,17 @@ export function useTransfer() {
         paymentType: 'transferencia'
       };
 
-      // Update account balances
-      const updatedAccounts = accounts.map(account => {
-        if (account.id === fromAccountId) {
-          const newBalance = account.currentBalance - Math.abs(amount);
-          if (newBalance < 0) {
-            throw new Error(`Saldo insuficiente en ${account.name}. Saldo actual: ${formatCurrency(account.currentBalance)}`);
-          }
-          return { ...account, currentBalance: newBalance };
-        }
-        if (account.id === toAccountId) {
-          return {
-            ...account,
-            currentBalance: account.currentBalance + Math.abs(amount)
-          };
-        }
-        return account;
-      });
+      const updatedTransactions = [
+        ...transactions,
+        debitTransaction,
+        creditTransaction
+      ];
 
-      // Calculate new final balance
+      // Calculate final balance
       const finalBalance = updatedAccounts.reduce(
         (sum, account) => sum + account.currentBalance,
         0
       );
-
-      const updatedTransactions = [...transactions, debitTransaction, creditTransaction];
 
       // Update database
       await update(ref(db, `closures/${closureId}`), {
@@ -136,6 +114,11 @@ export function useTransfer() {
         finalBalance,
         updatedAt: serverTimestamp()
       });
+
+      // Save description for suggestions
+      if (transferDescription) {
+        await addDescriptionFromTransaction(debitTransaction);
+      }
 
       return {
         updatedAccounts,

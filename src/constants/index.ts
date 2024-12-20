@@ -13,6 +13,10 @@ export const DEFAULT_ACCOUNTS = {
     name: 'Caja Mostrador',
     type: ACCOUNT_TYPES.CASH
   },
+  'account-5': {
+    name: 'Caja Banca Juegos',
+    type: ACCOUNT_TYPES.CASH
+  },
   'account-3': {
     name: 'Cuenta Débito Santander',
     type: ACCOUNT_TYPES.BANK

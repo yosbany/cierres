@@ -12,8 +12,12 @@ export function validateTransfer({
   toAccountId, 
   amount 
 }: TransferValidationParams): string | null {
-  if (!fromAccount || !toAccountId) {
-    return 'Por favor seleccione las cuentas de origen y destino';
+  if (!fromAccount) {
+    return 'La cuenta de origen es requerida';
+  }
+
+  if (!toAccountId) {
+    return 'La cuenta de destino es requerida';
   }
 
   if (!amount || amount <= 0) {

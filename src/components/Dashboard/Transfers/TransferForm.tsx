@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Account } from '../../../types';
 import { ArrowRight } from 'lucide-react';
 import { validateTransfer } from '../../../utils/transferValidation';
 import AccountSelect from './AccountSelect';
 import AmountInput from './AmountInput';
 import TransferError from './TransferError';
+import DescriptionInput from '../../common/DescriptionInput';
 
 interface TransferFormProps {
   accounts: Account[];
@@ -39,7 +40,7 @@ export default function TransferForm({
   const fromAccount = accounts.find(acc => acc.id === fromAccountId);
   const maxAmount = fromAccount?.currentBalance || 0;
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (fromAccountId && toAccountId && amount) {
       const error = validateTransfer({
         fromAccount,
@@ -51,6 +52,15 @@ export default function TransferForm({
       setValidationError(null);
     }
   }, [fromAccountId, toAccountId, amount, fromAccount]);
+
+  const isValid = Boolean(
+    fromAccountId &&
+    toAccountId &&
+    amount &&
+    parseFloat(amount) > 0 &&
+    description.trim() &&
+    !validationError
+  );
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -85,15 +95,13 @@ export default function TransferForm({
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Descripción (opcional)
+          Descripción
         </label>
-        <input
-          type="text"
+        <DescriptionInput
           value={description}
-          onChange={(e) => onDescriptionChange(e.target.value)}
-          className="input"
-          placeholder="Agregar una descripción"
+          onChange={onDescriptionChange}
           disabled={isSubmitting}
+          placeholder="Escriba o seleccione una descripción"
         />
       </div>
 
@@ -111,15 +119,7 @@ export default function TransferForm({
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={
-            isSubmitting || 
-            !fromAccountId || 
-            !toAccountId || 
-            !amount || 
-            parseFloat(amount) <= 0 || 
-            (fromAccount && parseFloat(amount) > fromAccount.currentBalance) ||
-            !!validationError
-          }
+          disabled={isSubmitting || !isValid}
         >
           {isSubmitting ? (
             <div className="flex items-center">

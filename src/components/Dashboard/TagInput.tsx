@@ -5,6 +5,8 @@ interface TagInputProps {
   tags: string[];
   suggestions: string[];
   onTagsChange: (tags: string[]) => void;
+  pendingTag?: string;
+  onPendingTagChange?: (tag: string) => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -13,10 +15,11 @@ export default function TagInput({
   tags,
   suggestions,
   onTagsChange,
+  pendingTag = '',
+  onPendingTagChange,
   disabled = false,
   placeholder = 'Presione Enter para agregar una etiqueta'
 }: TagInputProps) {
-  const [input, setInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,10 +37,10 @@ export default function TagInput({
   }, []);
 
   useEffect(() => {
-    if (input) {
+    if (pendingTag) {
       const filtered = suggestions.filter(
         suggestion => 
-          suggestion.toLowerCase().includes(input.toLowerCase()) &&
+          suggestion.toLowerCase().includes(pendingTag.toLowerCase()) &&
           !tags.includes(suggestion)
       );
       setFilteredSuggestions(filtered);
@@ -45,14 +48,16 @@ export default function TagInput({
     } else {
       setShowSuggestions(false);
     }
-  }, [input, suggestions, tags]);
+  }, [pendingTag, suggestions, tags]);
 
   const addTag = (tag: string) => {
     const trimmedTag = tag.trim();
     if (trimmedTag && !tags.includes(trimmedTag)) {
       onTagsChange([...tags, trimmedTag]);
     }
-    setInput('');
+    if (onPendingTagChange) {
+      onPendingTagChange('');
+    }
     setShowSuggestions(false);
   };
 
@@ -61,11 +66,24 @@ export default function TagInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && input) {
+    if (e.key === 'Enter' && pendingTag) {
       e.preventDefault();
-      addTag(input);
-    } else if (e.key === 'Backspace' && !input && tags.length > 0) {
+      addTag(pendingTag);
+    } else if (e.key === 'Backspace' && !pendingTag && tags.length > 0) {
       removeTag(tags[tags.length - 1]);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (onPendingTagChange) {
+      onPendingTagChange(e.target.value);
+    }
+  };
+
+  const handleBlur = () => {
+    // Add pending tag when input loses focus
+    if (pendingTag.trim()) {
+      addTag(pendingTag);
     }
   };
 
@@ -93,9 +111,10 @@ export default function TagInput({
           <input
             ref={inputRef}
             type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
+            value={pendingTag}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
             onFocus={() => setShowSuggestions(filteredSuggestions.length > 0)}
             className="flex-1 outline-none min-w-[120px] bg-transparent"
             placeholder={tags.length === 0 ? placeholder : ''}

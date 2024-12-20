@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { Transaction } from '../../../types';
-import TagInput from '../TagInput';
-import { useTransactionTags } from '../../../hooks/useTransactionTags';
+import DescriptionInput from '../../common/DescriptionInput';
 
 interface EditTransactionModalProps {
   isOpen: boolean;
@@ -19,21 +18,16 @@ export default function EditTransactionModal({
   onSave,
   isSubmitting
 }: EditTransactionModalProps) {
-  const { tags, addTags } = useTransactionTags();
   const [description, setDescription] = useState(transaction.description);
-
-  const currentTags = description ? 
-    description.split(',').map(tag => tag.trim()).filter(Boolean) : 
-    [];
-
-  const handleTagsChange = (newTags: string[]) => {
-    setDescription(newTags.join(', '));
-    addTags(newTags);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSave(description);
+    try {
+      await onSave(description.trim());
+      onClose();
+    } catch (error) {
+      console.error('Error saving description:', error);
+    }
   };
 
   if (!isOpen) return null;
@@ -61,12 +55,11 @@ export default function EditTransactionModal({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Descripción
                 </label>
-                <TagInput
-                  tags={currentTags}
-                  suggestions={tags}
-                  onTagsChange={handleTagsChange}
+                <DescriptionInput
+                  value={description}
+                  onChange={setDescription}
                   disabled={isSubmitting}
-                  placeholder="Agregar etiquetas (presione Enter para agregar)"
+                  placeholder="Escriba o seleccione una descripción"
                 />
               </div>
 
@@ -82,7 +75,7 @@ export default function EditTransactionModal({
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !description.trim()}
                 >
                   {isSubmitting ? (
                     <div className="flex items-center">

@@ -1,12 +1,11 @@
 import React from 'react';
 import { Transaction } from '../../types';
 import { usePredefinedData } from '../../hooks/usePredefinedData';
-import { useTransactionTags } from '../../hooks/useTransactionTags';
 import { PlusCircle, MinusCircle, Calculator, Wallet, CreditCard } from 'lucide-react';
-import TagInput from './TagInput';
 import CashCalculatorModal from '../CashCalculator/CashCalculatorModal';
 import { DEFAULT_CONCEPTS } from '../../constants';
 import { formatCurrency } from '../../utils/formatters';
+import DescriptionInput from '../common/DescriptionInput';
 
 interface TransactionFormProps {
   transaction: Partial<Transaction>;
@@ -28,7 +27,6 @@ export default function TransactionForm({
   accounts
 }: TransactionFormProps) {
   const { concepts } = usePredefinedData();
-  const { tags, addTags } = useTransactionTags();
   const [showCalculator, setShowCalculator] = React.useState(false);
 
   // Set default account if not set and accounts are available
@@ -42,11 +40,16 @@ export default function TransactionForm({
   const selectedConcept = concepts?.find(c => c.name === transaction.concept);
   const selectedAccount = accounts.find(acc => acc.id === transaction.accountId);
 
-  const isValid = transaction.concept && 
-                 transaction.accountId && 
-                 transaction.amount !== undefined && 
-                 transaction.amount !== null && 
-                 transaction.amount !== 0;
+  const isValid = React.useMemo(() => {
+    return Boolean(
+      transaction.concept && 
+      transaction.accountId && 
+      transaction.amount !== undefined && 
+      transaction.amount !== null && 
+      transaction.amount !== 0 &&
+      transaction.description?.trim()
+    );
+  }, [transaction.concept, transaction.accountId, transaction.amount, transaction.description]);
 
   const toggleAmountSign = () => {
     if (transaction.amount !== undefined && transaction.amount !== null) {
@@ -86,31 +89,6 @@ export default function TransactionForm({
     }
   };
 
-  const handleTagsChange = (newTags: string[]) => {
-    onUpdate({
-      ...transaction,
-      description: newTags.join(', ')
-    });
-    addTags(newTags);
-  };
-
-  const currentTags = transaction.description ? 
-    transaction.description.split(',').map(tag => tag.trim()).filter(Boolean) : 
-    [];
-
-  const getAccountIcon = (type: string) => {
-    switch (type) {
-      case 'efectivo':
-        return <Wallet className="h-4 w-4 text-green-600" />;
-      case 'banco':
-        return <CreditCard className="h-4 w-4 text-purple-600" />;
-      case 'credito':
-        return <CreditCard className="h-4 w-4 text-orange-600" />;
-      default:
-        return null;
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4">
@@ -132,12 +110,11 @@ export default function TransactionForm({
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Descripción
           </label>
-          <TagInput
-            tags={currentTags}
-            suggestions={tags}
-            onTagsChange={handleTagsChange}
+          <DescriptionInput
+            value={transaction.description || ''}
+            onChange={(value) => onUpdate({ ...transaction, description: value })}
             disabled={isSubmitting}
-            placeholder="Agregar etiquetas (presione Enter para agregar)"
+            placeholder="Escriba o seleccione una descripción"
           />
         </div>
 
@@ -160,13 +137,25 @@ export default function TransactionForm({
             </select>
             {selectedAccount && (
               <div className="absolute inset-y-0 left-2 flex items-center pointer-events-none">
-                {getAccountIcon(selectedAccount.type)}
+                {selectedAccount.type === 'efectivo' ? (
+                  <Wallet className="h-4 w-4 text-green-600" />
+                ) : selectedAccount.type === 'banco' ? (
+                  <CreditCard className="h-4 w-4 text-purple-600" />
+                ) : (
+                  <CreditCard className="h-4 w-4 text-orange-600" />
+                )}
               </div>
             )}
           </div>
           {selectedAccount && (
             <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
-              {getAccountIcon(selectedAccount.type)}
+              {selectedAccount.type === 'efectivo' ? (
+                <Wallet className="h-4 w-4 text-green-600" />
+              ) : selectedAccount.type === 'banco' ? (
+                <CreditCard className="h-4 w-4 text-purple-600" />
+              ) : (
+                <CreditCard className="h-4 w-4 text-orange-600" />
+              )}
               <span>Saldo disponible: {formatCurrency(selectedAccount.currentBalance)}</span>
             </div>
           )}

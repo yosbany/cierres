@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { Transaction, Account } from '../types';
 import { validateTransaction, getInitialTransactionState, formatTransactionAmount } from '../utils/transactionValidation';
 import { DEFAULT_CONCEPTS } from '../constants';
+import { useDescriptionTags } from './useDescriptionTags';
 import toast from 'react-hot-toast';
 
 interface AddTransactionParams {
@@ -15,6 +16,7 @@ interface AddTransactionParams {
 
 export function useTransaction() {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { addDescriptionFromTransaction } = useDescriptionTags();
 
   const addTransaction = async ({
     closureId,
@@ -70,7 +72,7 @@ export function useTransaction() {
         if (account.id === transaction.accountId) {
           const newBalance = account.currentBalance + formattedAmount;
           if (newBalance < 0) {
-            throw new Error('La operación resultaría en un saldo negativo');
+            throw new Error(`La operación resultaría en un saldo negativo en la cuenta ${account.name}`);
           }
           return {
             ...account,
@@ -83,12 +85,18 @@ export function useTransaction() {
       const updatedTransactions = [...currentTransactions, newTransaction];
       const finalBalance = updatedAccounts.reduce((sum, account) => sum + account.currentBalance, 0);
 
+      // Update database
       await update(ref(db, `closures/${closureId}`), {
         accounts: updatedAccounts,
         transactions: updatedTransactions,
         finalBalance,
         updatedAt: serverTimestamp()
       });
+
+      // Add description to tags
+      if (newTransaction.description) {
+        await addDescriptionFromTransaction(newTransaction);
+      }
 
       return {
         transaction: newTransaction,
