@@ -49,7 +49,12 @@ export default function TransactionForm({
       transaction.amount !== 0 &&
       transaction.description?.trim()
     );
-  }, [transaction.concept, transaction.accountId, transaction.amount, transaction.description]);
+  }, [
+    transaction.concept, 
+    transaction.accountId, 
+    transaction.amount, 
+    transaction.description
+  ]);
 
   const toggleAmountSign = () => {
     if (transaction.amount !== undefined && transaction.amount !== null) {
@@ -92,6 +97,7 @@ export default function TransactionForm({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4">
+        {/* Concept Selection */}
         <select
           value={transaction.concept || ''}
           onChange={e => handleConceptChange(e.target.value)}
@@ -106,21 +112,10 @@ export default function TransactionForm({
           ))}
         </select>
 
+        {/* Account Selection */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Descripción
-          </label>
-          <DescriptionInput
-            value={transaction.description || ''}
-            onChange={(value) => onUpdate({ ...transaction, description: value })}
-            disabled={isSubmitting}
-            placeholder="Escriba o seleccione una descripción"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Cuenta
+            Cuenta {selectedAccount && `(Saldo disponible: ${formatCurrency(selectedAccount.currentBalance)})`}
           </label>
           <div className="relative">
             <select
@@ -147,20 +142,9 @@ export default function TransactionForm({
               </div>
             )}
           </div>
-          {selectedAccount && (
-            <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
-              {selectedAccount.type === 'efectivo' ? (
-                <Wallet className="h-4 w-4 text-green-600" />
-              ) : selectedAccount.type === 'banco' ? (
-                <CreditCard className="h-4 w-4 text-purple-600" />
-              ) : (
-                <CreditCard className="h-4 w-4 text-orange-600" />
-              )}
-              <span>Saldo disponible: {formatCurrency(selectedAccount.currentBalance)}</span>
-            </div>
-          )}
         </div>
 
+        {/* Amount Input */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Monto
@@ -206,6 +190,19 @@ export default function TransactionForm({
             )}
           </div>
         </div>
+
+        {/* Description Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Descripción
+          </label>
+          <DescriptionInput
+            value={transaction.description || ''}
+            onChange={(value) => onUpdate({ ...transaction, description: value })}
+            disabled={isSubmitting}
+            placeholder="Escriba o seleccione una descripción"
+          />
+        </div>
       </div>
 
       <div className="flex justify-end gap-2">
@@ -218,7 +215,7 @@ export default function TransactionForm({
         </button>
         <button
           onClick={onSubmit}
-          className="btn btn-primary"
+          className={`btn ${isValid ? 'btn-primary' : 'bg-gray-300 text-gray-500 cursor-not-allowed hover:bg-gray-300'}`}
           disabled={isSubmitting || !isValid}
         >
           {isSubmitting ? 'Guardando...' : isEditing ? 'Actualizar' : 'Guardar'}

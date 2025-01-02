@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { DailyClosure, Transaction } from '../../types';
 import { ref, update, remove } from 'firebase/database';
 import { db } from '../../lib/firebase';
 import { usePredefinedData } from '../../hooks/usePredefinedData';
+import { useClosureAlerts } from '../../hooks/useClosureAlerts';
 import toast from 'react-hot-toast';
+
 import DashboardLayout from './DashboardLayout';
 import ClosureHeader from './ClosureDetail/ClosureHeader';
+import AlertsSection from './ClosureDetail/AlertsSection';
 import AccountsSummary from './AccountsSummary';
 import TransactionSection from './ClosureDetail/TransactionSection';
 import TotalsSummary from './TotalsSummary';
 import ObservationsSection from './ClosureDetail/ObservationsSection';
+
 import { useTransaction } from '../../hooks/useTransaction';
 import { useTransfer } from '../../hooks/useTransfer';
 import { getPendingTransactions } from '../../utils/transactionUtils';
+
 import FinalizeClosureModal from './FinalizeClosure/FinalizeClosureModal';
 import PendingTransactionsModal from './FinalizeClosure/PendingTransactionsModal';
 
@@ -24,7 +30,10 @@ interface ClosureDetailProps {
 
 export default function ClosureDetail({ closure: initialClosure, onBack }: ClosureDetailProps) {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const { concepts } = usePredefinedData();
+  const { alerts, loading: alertsLoading } = useClosureAlerts(initialClosure);
+  
   const [closure, setClosure] = useState<DailyClosure>(initialClosure);
   const [observations, setObservations] = useState(initialClosure.observations || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,6 +41,7 @@ export default function ClosureDetail({ closure: initialClosure, onBack }: Closu
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
+  
   const [newTransaction, setNewTransaction] = useState<Partial<Transaction>>({
     concept: '',
     description: '',
@@ -300,6 +310,8 @@ export default function ClosureDetail({ closure: initialClosure, onBack }: Closu
     }
   };
 
+  const isOwner = currentUser?.uid === closure.userId;
+
   return (
     <DashboardLayout>
       <ClosureHeader
@@ -308,9 +320,12 @@ export default function ClosureDetail({ closure: initialClosure, onBack }: Closu
         onFinalize={handleFinalizeClosure}
         onDelete={handleDeleteClosure}
         isSubmitting={isSubmitting}
+        isOwner={isOwner}
       />
 
       <div className="space-y-6">
+        <AlertsSection alerts={alerts} loading={alertsLoading} />
+
         <AccountsSummary 
           accounts={closure.accounts} 
           finalBalance={closure.finalBalance} 
@@ -334,6 +349,7 @@ export default function ClosureDetail({ closure: initialClosure, onBack }: Closu
           setNewTransaction={setNewTransaction}
           isAddingTransaction={isAddingTransaction}
           isTransferSubmitting={isTransferSubmitting}
+          isOwner={isOwner}
         />
 
         <TotalsSummary
@@ -347,7 +363,7 @@ export default function ClosureDetail({ closure: initialClosure, onBack }: Closu
           setObservations={setObservations}
           onSave={handleSaveObservations}
           isSubmitting={isSubmitting}
-          isClosureOpen={closure.status === 'open'}
+          isClosureOpen={closure.status === 'open' && isOwner}
         />
       </div>
 

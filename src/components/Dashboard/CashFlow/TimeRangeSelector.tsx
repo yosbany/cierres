@@ -5,7 +5,7 @@ import { es } from 'date-fns/locale';
 import RangeButton from './RangeButton';
 import CustomRangePopover from './CustomRangePopover';
 
-export type TimeRange = 'all' | 'lastMonth' | 'lastYear' | 'currentMonth' | 'currentYear' | 'currentQuarter' | 'custom';
+export type TimeRange = 'all' | 'currentYear' | 'currentMonth' | 'currentWeek' | 'custom';
 
 interface TimeRangeSelectorProps {
   value: TimeRange;
@@ -15,12 +15,10 @@ interface TimeRangeSelectorProps {
 }
 
 const TIME_RANGES: Array<{ value: TimeRange; label: string; description: string }> = [
-  { value: 'all', label: 'Todo', description: 'Mostrar todos los períodos' },
-  { value: 'currentMonth', label: 'Mes Actual', description: 'Datos del mes en curso' },
-  { value: 'lastMonth', label: 'Mes Anterior', description: 'Datos del mes pasado' },
-  { value: 'currentQuarter', label: 'Trimestre Actual', description: 'Datos del trimestre en curso' },
+  { value: 'all', label: 'Todos', description: 'Mostrar todos los períodos' },
   { value: 'currentYear', label: 'Año Actual', description: 'Datos del año en curso' },
-  { value: 'lastYear', label: 'Año Anterior', description: 'Datos del año pasado' },
+  { value: 'currentMonth', label: 'Mes Actual', description: 'Datos del mes en curso' },
+  { value: 'currentWeek', label: 'Semana Actual', description: 'Datos de la semana en curso' },
   { value: 'custom', label: 'Personalizado', description: 'Seleccionar rango personalizado' }
 ];
 

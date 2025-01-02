@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PredefinedAccount } from '../../../types';
 import { Wallet, CreditCard, Calculator } from 'lucide-react';
 import CashCalculatorModal from '../../CashCalculator/CashCalculatorModal';
+import { formatCurrency } from '../../../utils/formatters';
 
 interface AccountBalanceInputProps {
   account: PredefinedAccount;
@@ -23,7 +24,9 @@ export default function AccountBalanceInput({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     if (newValue === '' || parseFloat(newValue) >= 0) {
-      onChange(newValue);
+      // Format to 2 decimal places
+      const formattedValue = newValue === '' ? '' : Number(parseFloat(newValue).toFixed(2)).toString();
+      onChange(formattedValue);
     }
   };
 
@@ -52,7 +55,7 @@ export default function AccountBalanceInput({
               </label>
             </div>
             <span className={`text-sm ${previousBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              (Saldo anterior: ${previousBalance.toLocaleString('es-AR')})
+              (Saldo anterior: {formatCurrency(previousBalance)})
             </span>
           </div>
           <div className="relative">
@@ -88,7 +91,7 @@ export default function AccountBalanceInput({
         isOpen={showCalculator}
         onClose={() => setShowCalculator(false)}
         onConfirm={(amount) => {
-          onChange(amount.toString());
+          onChange(amount.toFixed(2));
           setShowCalculator(false);
         }}
         initialAmount={value ? parseFloat(value) : undefined}

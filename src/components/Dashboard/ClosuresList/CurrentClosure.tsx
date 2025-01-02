@@ -4,6 +4,8 @@ import { Calendar, Coins, CreditCard, ChevronRight } from 'lucide-react';
 import { formatShortDate } from '../../../utils/dateUtils';
 import { formatCurrency } from '../../../utils/formatters';
 import { calculateBalances } from './utils';
+import ClosureOwner from './ClosureOwner';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface CurrentClosureProps {
   closure: DailyClosure;
@@ -11,13 +13,18 @@ interface CurrentClosureProps {
 }
 
 export default function CurrentClosure({ closure, onClick }: CurrentClosureProps) {
+  const { currentUser } = useAuth();
   const { cashBalance, bankBalance, creditBalance } = calculateBalances(closure);
+  const isOwner = currentUser?.uid === closure.userId;
 
   return (
     <div className="mb-6">
-      <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
-        <Calendar className="h-5 w-5 text-blue-600 mr-2" />
-        Cierre Actual
+      <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center justify-between">
+        <div className="flex items-center">
+          <Calendar className="h-5 w-5 text-blue-600 mr-2" />
+          Cierre Actual
+        </div>
+        <ClosureOwner userId={closure.userId} isCurrentUser={isOwner} />
       </h3>
       <button
         onClick={() => onClick(closure)}
@@ -27,10 +34,10 @@ export default function CurrentClosure({ closure, onClick }: CurrentClosureProps
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex items-center mb-2">
-                <span className="text-xl font-semibold text-blue-900">
+                <span className="text-2xl font-bold text-blue-900">
                   {formatShortDate(closure.date)}
                 </span>
-                <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-green-100 text-green-800">
                   {closure.status === 'open' ? 'Abierto' : 'Cerrado'}
                 </span>
               </div>
@@ -42,7 +49,7 @@ export default function CurrentClosure({ closure, onClick }: CurrentClosureProps
                   </div>
                   <div>
                     <span className="text-gray-600">Efectivo</span>
-                    <p className={`font-medium ${cashBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-lg font-medium ${cashBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(cashBalance)}
                     </p>
                   </div>
@@ -54,7 +61,7 @@ export default function CurrentClosure({ closure, onClick }: CurrentClosureProps
                   </div>
                   <div>
                     <span className="text-gray-600">Banco</span>
-                    <p className={`font-medium ${bankBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-lg font-medium ${bankBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(bankBalance)}
                     </p>
                   </div>
@@ -66,7 +73,7 @@ export default function CurrentClosure({ closure, onClick }: CurrentClosureProps
                   </div>
                   <div>
                     <span className="text-gray-600">Crédito</span>
-                    <p className={`font-medium ${creditBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-lg font-medium ${creditBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(creditBalance)}
                     </p>
                   </div>
@@ -77,7 +84,7 @@ export default function CurrentClosure({ closure, onClick }: CurrentClosureProps
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <span className="text-sm text-gray-600">Balance Total</span>
-                <p className={`text-lg font-bold ${closure.finalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                <p className={`text-xl font-bold ${closure.finalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                   {formatCurrency(closure.finalBalance)}
                 </p>
               </div>

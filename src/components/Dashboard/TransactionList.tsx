@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Transaction, PredefinedConcept } from '../../types';
-import { Edit, Trash2, CheckCircle, HourglassIcon, HelpCircle, PencilIcon } from 'lucide-react';
+import { CheckCircle, HourglassIcon, HelpCircle, PencilIcon } from 'lucide-react';
 import { formatDateTime } from '../../utils/dateUtils';
-import { TRANSACTION_STATES } from '../../constants';
+import { formatCurrency } from '../../utils/formatters';
 import StatusHelpModal from './StatusHelpModal';
 import StatusChangeModal from './StatusChangeModal';
-import { formatCurrency } from '../../utils/formatters';
 import EditTransactionModal from './Transactions/EditTransactionModal';
+import { calculateRunningBalances } from '../../utils/balanceCalculations';
 
 interface TransactionListProps {
   transactions?: Transaction[];
@@ -14,9 +14,9 @@ interface TransactionListProps {
   concepts: PredefinedConcept[];
   isClosureOpen: boolean;
   isSubmitting: boolean;
-  onStatusUpdate?: (transaction: Transaction) => void;
+  onStatusUpdate?: (transaction: Transaction) => Promise<void>;
   onDescriptionUpdate?: (transaction: Transaction, description: string) => Promise<void>;
-  onDelete: (transactionId: string) => void;
+  onDelete: (transactionId: string) => Promise<void>;
 }
 
 export default function TransactionList({
@@ -33,6 +33,16 @@ export default function TransactionList({
   const [statusChangeTransaction, setStatusChangeTransaction] = useState<Transaction | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
+  // Sort transactions by timestamp in descending order (newest first)
+  const sortedTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => b.timestamp - a.timestamp);
+  }, [transactions]);
+
+  // Calculate running balances for each account
+  const runningBalances = useMemo(() => {
+    return calculateRunningBalances(sortedTransactions, accounts);
+  }, [sortedTransactions, accounts]);
+
   const getStateTooltip = (concept: PredefinedConcept, stateName: string) => {
     const state = concept.states.find(s => s.name === stateName);
     if (!state) return '';
@@ -44,16 +54,6 @@ export default function TransactionList({
     }
 
     return `Click para cambiar a "${nextState?.name}"`;
-  };
-
-  const getStateDescription = (stateName: string) => {
-    const state = Object.values(TRANSACTION_STATES).find(s => s.name === stateName);
-    return state?.description || 'Estado del movimiento';
-  };
-
-  const handleShowHelp = (status: string) => {
-    const description = getStateDescription(status);
-    setSelectedStatus({ name: status, description });
   };
 
   const handleStatusUpdateClick = (transaction: Transaction) => {
@@ -71,24 +71,11 @@ export default function TransactionList({
     setStatusChangeTransaction(transaction);
   };
 
-  const handleConfirmStatusChange = () => {
+  const handleConfirmStatusChange = async () => {
     if (statusChangeTransaction && onStatusUpdate) {
-      onStatusUpdate(statusChangeTransaction);
+      await onStatusUpdate(statusChangeTransaction);
       setStatusChangeTransaction(null);
     }
-  };
-
-  const getNextStatus = (transaction: Transaction | null) => {
-    if (!transaction) return '';
-    
-    const concept = concepts.find(c => c.name === transaction.concept);
-    if (!concept) return '';
-
-    const currentState = concept.states.find(s => s.name === transaction.status);
-    if (!currentState) return '';
-
-    const nextState = concept.states[concept.states.indexOf(currentState) + 1];
-    return nextState?.name || '';
   };
 
   if (!transactions.length) {
@@ -122,6 +109,9 @@ export default function TransactionList({
                   <th scope="col" className="px-3 py-3.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Monto
                   </th>
+                  <th scope="col" className="px-3 py-3.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Saldo
+                  </th>
                   <th scope="col" className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Estado
                   </th>
@@ -133,14 +123,19 @@ export default function TransactionList({
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {transactions.map((transaction) => {
+                {sortedTransactions.map((transaction) => {
                   const concept = concepts?.find(c => c.name === transaction.concept);
                   const currentState = concept?.states.find(s => s.name === transaction.status);
                   const isLastState = currentState && concept?.states.indexOf(currentState) === concept.states.length - 1;
                   const isTransfer = transaction.paymentType === 'transferencia';
+                  
+                  // Get running balance for this transaction
+                  const accountTransactions = sortedTransactions.filter(t => t.accountId === transaction.accountId);
+                  const transactionIndex = accountTransactions.findIndex(t => t.id === transaction.id);
+                  const balance = runningBalances[transaction.accountId]?.[transactionIndex] || 0;
 
                   return (
-                    <tr key={`${transaction.id}-${transaction.timestamp}`} className="hover:bg-gray-50">
+                    <tr key={transaction.id} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-gray-900 sm:pl-6">
                         {formatDateTime(transaction.timestamp)}
                       </td>
@@ -169,6 +164,11 @@ export default function TransactionList({
                           {formatCurrency(Math.abs(transaction.amount))}
                         </span>
                       </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-right font-medium">
+                        <span className={balance >= 0 ? 'text-blue-600' : 'text-red-600'}>
+                          {formatCurrency(balance)}
+                        </span>
+                      </td>
                       <td className="whitespace-nowrap px-3 py-4 text-sm">
                         <div className="inline-flex items-center">
                           {isClosureOpen && !isLastState && !isTransfer ? (
@@ -194,7 +194,7 @@ export default function TransactionList({
                             </span>
                           )}
                           <button
-                            onClick={() => handleShowHelp(transaction.status)}
+                            onClick={() => setSelectedStatus({ name: transaction.status, description: '' })}
                             className="ml-1 text-gray-400 hover:text-gray-600"
                           >
                             <HelpCircle className="h-4 w-4" />
@@ -210,7 +210,9 @@ export default function TransactionList({
                               disabled={isSubmitting}
                               title="Eliminar movimiento"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
                             </button>
                           </div>
                         </td>
@@ -236,7 +238,7 @@ export default function TransactionList({
         onClose={() => setStatusChangeTransaction(null)}
         onConfirm={handleConfirmStatusChange}
         currentStatus={statusChangeTransaction?.status || ''}
-        nextStatus={getNextStatus(statusChangeTransaction)}
+        nextStatus={statusChangeTransaction?.status || ''}
         isLoading={isSubmitting}
       />
 

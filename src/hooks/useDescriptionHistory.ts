@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
-import { ref, get, set } from 'firebase/database';
+import { ref, get, push, update } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 
-interface DescriptionEntry {
+interface Description {
+  id?: string;
   text: string;
   timestamp: number;
+  userId: string;
 }
 
 export function useDescriptionHistory() {
-  const [descriptions, setDescriptions] = useState<DescriptionEntry[]>([]);
+  const [descriptions, setDescriptions] = useState<Description[]>([]);
   const { currentUser } = useAuth();
 
   useEffect(() => {
@@ -20,16 +22,18 @@ export function useDescriptionHistory() {
     if (!currentUser) return;
 
     try {
-      const descriptionsRef = ref(db, `users/${currentUser.uid}/descriptions`);
+      const descriptionsRef = ref(db, 'descriptions');
       const snapshot = await get(descriptionsRef);
       
       if (snapshot.exists()) {
-        const data = snapshot.val();
-        if (Array.isArray(data)) {
-          // Sort by most recent first
-          const sortedDescriptions = [...data].sort((a, b) => b.timestamp - a.timestamp);
-          setDescriptions(sortedDescriptions);
-        }
+        const data = Object.entries(snapshot.val()).map(([id, value]) => ({
+          id,
+          ...(value as Omit<Description, 'id'>)
+        }));
+        
+        // Sort by most recent first
+        const sortedDescriptions = data.sort((a, b) => b.timestamp - a.timestamp);
+        setDescriptions(sortedDescriptions);
       }
     } catch (error) {
       console.error('Error loading descriptions:', error);
@@ -41,25 +45,29 @@ export function useDescriptionHistory() {
 
     try {
       const trimmedText = text.trim();
-      const descriptionsRef = ref(db, `users/${currentUser.uid}/descriptions`);
+      const descriptionsRef = ref(db, 'descriptions');
       
-      // Create new description entry
-      const newDescription: DescriptionEntry = {
-        text: trimmedText,
-        timestamp: Date.now()
-      };
+      // Check if description already exists
+      const existingDescription = descriptions.find(d => d.text === trimmedText);
+      
+      if (existingDescription) {
+        // Update timestamp of existing description
+        const updates = {
+          [`${existingDescription.id}/timestamp`]: Date.now()
+        };
+        await update(ref(db, 'descriptions'), updates);
+      } else {
+        // Add new description
+        const newDescription: Omit<Description, 'id'> = {
+          text: trimmedText,
+          timestamp: Date.now(),
+          userId: currentUser.uid
+        };
+        await push(descriptionsRef, newDescription);
+      }
 
-      // Remove existing entry with same text if exists
-      const filteredDescriptions = descriptions.filter(d => d.text !== trimmedText);
-      
-      // Add new entry at the beginning
-      const updatedDescriptions = [newDescription, ...filteredDescriptions];
-      
-      // Keep only the last 50 descriptions
-      const limitedDescriptions = updatedDescriptions.slice(0, 50);
-      
-      await set(descriptionsRef, limitedDescriptions);
-      setDescriptions(limitedDescriptions);
+      // Reload descriptions to get updated list
+      await loadDescriptions();
     } catch (error) {
       console.error('Error saving description:', error);
     }

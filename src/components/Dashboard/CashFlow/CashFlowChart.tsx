@@ -26,9 +26,22 @@ interface CashFlowChartProps {
 export default function CashFlowChart({ data }: CashFlowChartProps) {
   return (
     <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={data}>
+      <ComposedChart 
+        data={data}
+        margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+      >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="period" />
+        <XAxis 
+          dataKey="period" 
+          angle={-45}
+          textAnchor="end"
+          height={100}
+          interval={0}
+          tick={{ 
+            dy: 10,
+            fontSize: 12
+          }}
+        />
         <YAxis
           tickFormatter={(value) => formatCurrency(value)}
           width={100}
@@ -42,7 +55,10 @@ export default function CashFlowChart({ data }: CashFlowChartProps) {
             borderRadius: '0.375rem'
           }}
         />
-        <Legend />
+        <Legend 
+          verticalAlign="top"
+          height={36}
+        />
         <Bar
           dataKey="income"
           name="Ingresos"

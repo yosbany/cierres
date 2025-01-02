@@ -11,6 +11,7 @@ import {
   sub,
   format,
   getWeek,
+  getYear,
   eachWeekOfInterval,
   eachMonthOfInterval,
   eachYearOfInterval,
@@ -35,15 +36,8 @@ export interface CashFlowData {
   balance: number;
 }
 
-interface PeriodData {
-  income: number;
-  expense: number;
-  date: Date;
-  closures: DailyClosure[];
-}
-
 export function getDateRange(timeRange: TimeRange, customRange?: { startDate: string; endDate: string } | null) {
-  const closureDate = new Date();
+  const today = new Date();
 
   if (timeRange === 'custom' && customRange) {
     return {
@@ -53,33 +47,23 @@ export function getDateRange(timeRange: TimeRange, customRange?: { startDate: st
   }
 
   switch (timeRange) {
-    case 'lastMonth':
+    case 'currentWeek':
       return {
-        startDate: startOfMonth(sub(closureDate, { months: 1 })),
-        endDate: endOfMonth(sub(closureDate, { months: 1 }))
-      };
-    case 'lastYear':
-      return {
-        startDate: startOfYear(sub(closureDate, { years: 1 })),
-        endDate: endOfYear(sub(closureDate, { years: 1 }))
+        startDate: startOfWeek(today, { locale: es }),
+        endDate: endOfWeek(today, { locale: es })
       };
     case 'currentMonth':
       return {
-        startDate: startOfMonth(closureDate),
-        endDate: endOfMonth(closureDate)
+        startDate: startOfMonth(today),
+        endDate: endOfMonth(today)
       };
     case 'currentYear':
       return {
-        startDate: startOfYear(closureDate),
-        endDate: endOfYear(closureDate)
+        startDate: startOfYear(today),
+        endDate: endOfYear(today)
       };
-    case 'currentQuarter':
-      return {
-        startDate: startOfQuarter(closureDate),
-        endDate: endOfQuarter(closureDate)
-      };
-    default:
-      return null; // For 'all', return null to use min/max dates from closures
+    default: // 'all'
+      return null;
   }
 }
 
@@ -104,16 +88,22 @@ export function generatePeriods(startDate: Date, endDate: Date, grouping: Groupi
 export function formatPeriod(date: Date, grouping: GroupingType): string {
   switch (grouping) {
     case 'day':
-      return format(date, "d 'de' MMMM", { locale: es });
+      return format(date, "d 'de' MMMM yyyy", { locale: es });
     case 'week': {
       const weekNumber = getWeek(date, { locale: es });
-      const yearOfWeek = format(date, 'yyyy');
-      return `Semana ${weekNumber} - ${yearOfWeek}`;
+      const year = getYear(date);
+      const nextYear = getYear(endOfWeek(date, { locale: es }));
+      
+      // If the week spans across years, show both years
+      if (year !== nextYear) {
+        return `Semana ${weekNumber} - ${year}/${nextYear}`;
+      }
+      return `Semana ${weekNumber} - ${year}`;
     }
     case 'month':
-      return format(date, 'MMMM yyyy', { locale: es });
+      return format(date, "MMMM yyyy", { locale: es });
     case 'year':
-      return format(date, 'yyyy');
+      return format(date, "yyyy");
     default:
       return '';
   }
@@ -141,7 +131,7 @@ export function isClosureInPeriod(
   }
 }
 
-export function calculatePeriodData(closures: DailyClosure[]): {
+function calculatePeriodData(closures: DailyClosure[]): {
   income: number;
   expense: number;
   balance: number;

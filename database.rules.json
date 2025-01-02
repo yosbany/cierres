@@ -1,22 +1,23 @@
 {
   "rules": {
     "closures": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid",
-        "$closureId": {
-          ".validate": "newData.hasChild('userId') && newData.child('userId').val() === auth.uid"
-        }
+      ".read": "auth != null",
+      "$closureId": {
+        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid)",
+        ".validate": "newData.hasChild('userId') && newData.child('userId').val() === auth.uid"
+      }
+    },
+    "descriptions": {
+      ".read": "auth != null", 
+      "$descriptionId": {
+        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid)",
+        ".validate": "newData.hasChild('userId') && newData.child('userId').val() === auth.uid"
       }
     },
     "users": {
       "$uid": {
         ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid",
-        "transactionTags": {
-          ".read": "$uid === auth.uid",
-          ".write": "$uid === auth.uid"
-        }
+        ".write": "$uid === auth.uid"
       }
     }
   }
