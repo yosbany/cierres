@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DailyClosure, Transaction } from '../types';
-import { useManagerOrders } from './useManagerOrders';
+import { useManagerPayments } from './useManagerPayments';
+import { validatePaymentWithManager } from '../utils/paymentValidation';
 import { formatCurrency } from '../utils/formatters';
 
 export interface ClosureAlert {
@@ -10,16 +11,16 @@ export interface ClosureAlert {
   message: string;
   details?: {
     transaction?: Transaction;
-    orderAmount?: number;
+    paymentAmount?: number;
     difference?: number;
-    supplier?: string;
-    reference?: string;
+    payee?: string;
+    paidFrom?: string;
   };
 }
 
 export function useClosureAlerts(closure: DailyClosure) {
   const [alerts, setAlerts] = useState<ClosureAlert[]>([]);
-  const { orders, loading, error } = useManagerOrders(closure.date);
+  const { payments, loading, error } = useManagerPayments(closure.date);
 
   useEffect(() => {
     if (!closure || loading) return;
@@ -31,46 +32,44 @@ export function useClosureAlerts(closure: DailyClosure) {
         id: 'api-error',
         type: 'error',
         title: 'Error de Conexión',
-        message: 'No se pudo verificar las órdenes de compra en Manager.io. Por favor, intente nuevamente.'
+        message: 'No se pudo verificar los pagos en Manager.io. Por favor, intente nuevamente.'
       });
     }
 
-    const supplierPayments = closure.transactions?.filter(t => 
-      t.concept === '(-) Pago a Proveedores' && 
+    // Filter expense transactions
+    const expenseTransactions = closure.transactions?.filter(t => 
+      t.amount < 0 && 
       Math.abs(t.amount) > 0
     ) || [];
 
-    if (supplierPayments.length > 0) {
-      supplierPayments.forEach(payment => {
-        const paymentAmount = Math.abs(payment.amount);
-        const matchingOrder = orders.find(order => 
-          Math.abs(order.amount - paymentAmount) < 0.01
-        );
-
-        if (!matchingOrder) {
+    if (expenseTransactions.length > 0) {
+      expenseTransactions.forEach(transaction => {
+        const validation = validatePaymentWithManager(transaction, payments);
+        
+        if (!validation.isValid) {
           newAlerts.push({
-            id: `payment-${payment.id}`,
+            id: `payment-${transaction.id}`,
             type: 'warning',
-            title: 'Pago sin Orden de Compra',
-            message: `El pago de ${formatCurrency(paymentAmount)} no coincide con ninguna orden de compra registrada en Manager.io`,
+            title: 'Pago no encontrado en Manager',
+            message: validation.message || 'El pago no fue encontrado en Manager.io',
             details: {
-              transaction: payment
+              transaction
             }
           });
-        } else if (Math.abs(matchingOrder.amount - paymentAmount) > 0) {
-          const difference = Math.abs(matchingOrder.amount - paymentAmount);
+        } else if (validation.managerPayment) {
+          const difference = Math.abs(validation.managerPayment.amount.value - Math.abs(transaction.amount));
           if (difference > 0.01) {
             newAlerts.push({
-              id: `mismatch-${payment.id}`,
+              id: `mismatch-${transaction.id}`,
               type: 'error',
               title: 'Diferencia en Montos',
-              message: `El monto del pago no coincide con la orden de compra registrada en Manager.io`,
+              message: 'El monto del pago no coincide con el registrado en Manager.io',
               details: {
-                transaction: payment,
-                orderAmount: matchingOrder.amount,
+                transaction,
+                paymentAmount: validation.managerPayment.amount.value,
                 difference,
-                supplier: matchingOrder.supplier?.name,
-                reference: matchingOrder.reference
+                payee: validation.managerPayment.payee,
+                paidFrom: validation.managerPayment.paidFrom
               }
             });
           }
@@ -79,7 +78,7 @@ export function useClosureAlerts(closure: DailyClosure) {
     }
 
     setAlerts(newAlerts);
-  }, [closure, orders, loading, error]);
+  }, [closure, payments, loading, error]);
 
   return { alerts, loading };
 }
